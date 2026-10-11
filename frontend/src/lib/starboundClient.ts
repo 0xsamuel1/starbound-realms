@@ -10,7 +10,7 @@ const REQUIRED_KEYS = [
 ] as const;
 
 /** Reads one required env var, or throws a clear error naming which one is missing. */
-function requireEnv(env: Record<string, string | undefined>, key: (typeof REQUIRED_KEYS)[number]): string {
+function requireEnv(env: Record<string, string | undefined>, key: (typeof REQUIRED_KEYS)[number] | 'VITE_RESOURCE_ISSUER'): string {
   const value = env[key];
   if (!value) {
     throw new Error(`${key} is not set`);
@@ -40,4 +40,14 @@ export function getStarboundClient(): StarboundClient {
     cachedClient = new StarboundClient(buildStarboundClientConfig(import.meta.env));
   }
   return cachedClient;
+}
+
+/** Reads the address that issued the IRON/NRGY/PLSM assets, which trustlines must name. */
+export function readResourceIssuer(env: Record<string, string | undefined>): string {
+  return requireEnv(env, 'VITE_RESOURCE_ISSUER');
+}
+
+/** Returns the resource asset issuer from Vite's env vars. */
+export function getResourceIssuer(): string {
+  return readResourceIssuer(import.meta.env);
 }

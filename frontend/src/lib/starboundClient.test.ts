@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildStarboundClientConfig } from './starboundClient';
+import { buildStarboundClientConfig, readResourceIssuer } from './starboundClient';
 
 function validEnv(): Record<string, string | undefined> {
   return {
@@ -47,5 +47,19 @@ describe('buildStarboundClientConfig', () => {
     delete env[key];
 
     expect(() => buildStarboundClientConfig(env)).toThrow(new RegExp(key));
+  });
+});
+
+describe('readResourceIssuer', () => {
+  it('returns the issuer address of the resource assets', () => {
+    expect(readResourceIssuer({ VITE_RESOURCE_ISSUER: 'GISSUER' })).toBe('GISSUER');
+  });
+
+  it('throws a clear error when it is missing', () => {
+    expect(() => readResourceIssuer({})).toThrow(/VITE_RESOURCE_ISSUER/);
+  });
+
+  it('throws when it is set to an empty string', () => {
+    expect(() => readResourceIssuer({ VITE_RESOURCE_ISSUER: '' })).toThrow(/VITE_RESOURCE_ISSUER/);
   });
 });
