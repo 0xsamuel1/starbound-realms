@@ -41,12 +41,20 @@ Three resource types exist, each issued as a native Stellar asset:
 | Energy | `NRGY` | Build Dreadnoughts, power fleet movement |
 | Plasma | `PLSM` | Advanced units and future upgrades |
 
-Resources are mined by calling `resources.mint` (triggered by the game after a mining cycle). Since they are real Stellar assets, players can:
+Since they are real Stellar assets, players can:
 - Hold them in their Freighter wallet
 - Trade them freely on the Stellar DEX
 - Send them to other players
 
-**Mining cycle:** Resources accumulate passively. A player calls the mining function to claim their yield. The amount is based on the system's `resource_yield` value.
+**Trustlines (one-time setup):** because these are classic Stellar assets, a player's account must trust each
+one before it can receive any. Without that, a mint to the player fails with "trustline entry is missing". The
+SDK's `ResourcesClient.establishTrustlines` creates all missing trustlines in a single transaction the player
+signs, and does nothing if none are missing. In the app, a banner offers this once a wallet is connected; it
+never prompts for a signature on its own.
+
+**How resources are created today:** only through `resources.mint`, which is admin-only. There is no
+player-callable mining function yet, so each system's `resource_yield` and `last_claimed` are stored but not
+used. Passive mining (a player claiming their systems' yield) is planned, not implemented.
 
 ---
 

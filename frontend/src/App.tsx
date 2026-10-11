@@ -3,9 +3,11 @@ import { GalaxyClient, FleetClient, BattleClient, UnitType } from '@starbound-re
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
 import { useFleetData } from './hooks/useFleetData';
+import { useTrustlines } from './hooks/useTrustlines';
 import { GalaxyMap } from './components/GalaxyMap';
 import { StarSystem } from './components/StarSystem';
 import { Fleet } from './components/Fleet';
+import { ResourceSetupBanner } from './components/ResourceSetupBanner';
 import { truncateAddress } from './lib/format';
 import { getStarboundClient } from './lib/starboundClient';
 
@@ -298,6 +300,12 @@ export default function App() {
   );
 
   const { fleet, error: fleetError, refetch: refetchFleet } = useFleetData(walletAddress);
+  const {
+    missing: missingTrustlines,
+    isSettingUp: settingUpTrustlines,
+    error: trustlineError,
+    setUpTrustlines,
+  } = useTrustlines(walletAddress, signTransaction);
   const [buildError, setBuildError] = useState<string | null>(null);
 
   const buildUnit = useCallback(
@@ -461,6 +469,12 @@ export default function App() {
           whole point is coloring systems by ownership relative to you. */}
       {walletConnected && (
         <section style={styles.galaxySection}>
+          <ResourceSetupBanner
+            missing={missingTrustlines}
+            isSettingUp={settingUpTrustlines}
+            onSetUp={setUpTrustlines}
+          />
+          {trustlineError && <p style={styles.walletError}>{trustlineError}</p>}
           <h2 style={styles.galaxyTitle}>The Galaxy</h2>
           {galaxyLoading && <p style={styles.textMuted}>Loading galaxy...</p>}
           {galaxyError && <p style={styles.walletError}>{galaxyError}</p>}
