@@ -135,6 +135,7 @@ impl GalaxyMapContract {
         let old_owner = verify_system_is_owned_by(&system, &caller);
 
         system.owner = Some(new_owner.clone());
+        system.last_claimed = env.ledger().timestamp();
         env.storage()
             .persistent()
             .set(&DataKey::System(system_id), &system);
@@ -173,6 +174,7 @@ impl GalaxyMapContract {
         let old_owner = system.owner.clone();
 
         system.owner = Some(new_owner.clone());
+        system.last_claimed = env.ledger().timestamp();
         env.storage()
             .persistent()
             .set(&DataKey::System(system_id), &system);
@@ -605,5 +607,38 @@ mod tests {
         client.transfer_ownership(&owner, &3, &new_owner);
 
         assert_eq!(client.get_system(&3).owner, Some(new_owner));
+    }
+
+    // ── last_claimed tracks the current owner's acquisition ─────────────────
+
+    #[test]
+    fn transfer_ownership_resets_last_claimed_to_the_transfer_time() {
+        let env = Env::default();
+        let (client, _) = setup_galaxy(&env);
+        let owner = Address::generate(&env);
+        let new_owner = Address::generate(&env);
+        env.ledger().set_timestamp(1_000);
+        client.claim_system(&owner, &3);
+
+        env.ledger().set_timestamp(5_000);
+        client.transfer_ownership(&owner, &3, &new_owner);
+
+        assert_eq!(client.get_system(&3).last_claimed, 5_000);
+    }
+
+    #[test]
+    fn battle_transfer_resets_last_claimed_to_the_conquest_time() {
+        let env = Env::default();
+        let (client, admin) = setup_galaxy(&env);
+        let battle = register_battle_contract(&env, &client, &admin);
+        let owner = Address::generate(&env);
+        let winner = Address::generate(&env);
+        env.ledger().set_timestamp(1_000);
+        client.claim_system(&owner, &3);
+
+        env.ledger().set_timestamp(7_000);
+        battle.trigger_transfer(&client.address, &3, &winner);
+
+        assert_eq!(client.get_system(&3).last_claimed, 7_000);
     }
 }
