@@ -12,6 +12,7 @@ pub enum DataKey {
     GalaxyMapContract,
     BattleContract,
     Fleet(Address),
+    Deployed(Address),
     Initialized,
 }
 
@@ -52,10 +53,26 @@ pub trait ResourcesInterface {
     fn burn(env: Env, from: Address, resource: ResourceType, amount: i128);
 }
 
+/// Mirrors galaxy_map::StarSystem field-for-field. Only `owner` is read here,
+/// but the whole struct is decoded so the encoding matches the galaxy-map
+/// contract exactly.
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct StarSystem {
+    pub owner: Option<Address>,
+    pub coord_x: u32,
+    pub coord_y: u32,
+    pub resource_type: ResourceType,
+    pub resource_yield: u32,
+    pub defense_rating: u32,
+    pub last_claimed: u64,
+}
+
 /// The slice of the galaxy-map contract this contract depends on.
 #[contractclient(name = "GalaxyMapClient")]
 pub trait GalaxyMapInterface {
     fn get_grid_size(env: Env) -> u32;
+    fn get_system(env: Env, system_id: u32) -> StarSystem;
 }
 
 /// Minimum seconds between two fleet moves.
@@ -119,12 +136,32 @@ impl FleetContract {
             .publish((symbol_short!("built"), player), (unit_type, count));
     }
 
+    /// Give a fleet its first location, at a system the player owns. Works
+    /// once per player; after that the fleet moves with `move_fleet`.
+    pub fn deploy_fleet(env: Env, player: Address, system_id: u32) {
+        player.require_auth();
+        verify_fleet_is_not_deployed(&env, &player);
+
+        let system = fetch_system(&env, system_id);
+        verify_player_owns_system(&system.owner, &player);
+
+        let mut fleet = get_stored_fleet(&env, &player);
+        fleet.location = system_id;
+        fleet.last_moved = env.ledger().timestamp();
+        save_fleet(&env, &player, &fleet);
+        set_fleet_deployed(&env, &player);
+
+        env.events()
+            .publish((symbol_short!("deployed"), player), system_id);
+    }
+
     /// Move your fleet to an adjacent system, at most once per cooldown period.
     pub fn move_fleet(env: Env, player: Address, target_system_id: u32) {
         player.require_auth();
 
         let mut fleet = get_stored_fleet(&env, &player);
         verify_fleet_is_not_empty(&fleet);
+        verify_fleet_is_deployed(&env, &player);
         verify_cooldown_has_elapsed(&fleet, env.ledger().timestamp());
 
         let grid_size = fetch_grid_size(&env);
@@ -263,6 +300,48 @@ fn fetch_grid_size(env: &Env) -> u32 {
     GalaxyMapClient::new(env, &galaxy_addr).get_grid_size()
 }
 
+fn fetch_system(env: &Env, system_id: u32) -> StarSystem {
+    let galaxy_addr: Address = env
+        .storage()
+        .instance()
+        .get(&DataKey::GalaxyMapContract)
+        .expect("not initialized");
+    GalaxyMapClient::new(env, &galaxy_addr).get_system(&system_id)
+}
+
+fn verify_player_owns_system(owner: &Option<Address>, player: &Address) {
+    if owner.as_ref() != Some(player) {
+        panic!("player does not own this system");
+    }
+}
+
+/// A fleet is "deployed" once it has been given a real location. Tracked
+/// separately from `location` so system 0 is not mistaken for "unset".
+fn is_fleet_deployed(env: &Env, player: &Address) -> bool {
+    env.storage()
+        .persistent()
+        .get(&DataKey::Deployed(player.clone()))
+        .unwrap_or(false)
+}
+
+fn set_fleet_deployed(env: &Env, player: &Address) {
+    env.storage()
+        .persistent()
+        .set(&DataKey::Deployed(player.clone()), &true);
+}
+
+fn verify_fleet_is_not_deployed(env: &Env, player: &Address) {
+    if is_fleet_deployed(env, player) {
+        panic!("fleet already deployed");
+    }
+}
+
+fn verify_fleet_is_deployed(env: &Env, player: &Address) {
+    if !is_fleet_deployed(env, player) {
+        panic!("fleet is not deployed");
+    }
+}
+
 fn verify_count_is_positive(count: u32) {
     if count == 0 {
         panic!("count must be positive");
@@ -383,7 +462,8 @@ mod tests {
         }
     }
 
-    /// Stand-in for the galaxy-map contract: a fixed 4x4 grid.
+    /// Stand-in for the galaxy-map contract: a fixed 4x4 grid whose systems can
+    /// be seeded with an owner, so `deploy_fleet` can read ownership.
     #[contract]
     struct MockGalaxy;
 
@@ -392,11 +472,33 @@ mod tests {
         pub fn get_grid_size(_env: Env) -> u32 {
             4
         }
+
+        pub fn seed_system(env: Env, system_id: u32, owner: Address) {
+            env.storage().persistent().set(&system_id, &owner);
+        }
+
+        pub fn get_system(env: Env, system_id: u32) -> StarSystem {
+            let owner: Address = env
+                .storage()
+                .persistent()
+                .get(&system_id)
+                .expect("system not found");
+            StarSystem {
+                owner: Some(owner),
+                coord_x: 0,
+                coord_y: 0,
+                resource_type: ResourceType::Iron,
+                resource_yield: 0,
+                defense_rating: 0,
+                last_claimed: 0,
+            }
+        }
     }
 
     struct Fixture<'a> {
         client: FleetContractClient<'a>,
         resources: MockResourcesClient<'a>,
+        galaxy: MockGalaxyClient<'a>,
         admin: Address,
     }
 
@@ -408,7 +510,12 @@ mod tests {
         let client = FleetContractClient::new(env, &contract_id);
         let admin = Address::generate(env);
         client.initialize(&admin, &resources_id, &galaxy_id);
-        Fixture { client, resources: MockResourcesClient::new(env, &resources_id), admin }
+        Fixture {
+            client,
+            resources: MockResourcesClient::new(env, &resources_id),
+            galaxy: MockGalaxyClient::new(env, &galaxy_id),
+            admin,
+        }
     }
 
     /// Registers a mock battle contract on an already-initialized fixture and
@@ -609,11 +716,115 @@ mod tests {
         assert!(!is_fleet_empty(&Fleet { dreadnoughts: 1, ..empty_fleet() }));
     }
 
+    // ── deploy_fleet ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn deploy_fleet_sets_the_initial_location() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        fx.client.build_unit(&player, &UnitType::Scout, &1);
+        fx.galaxy.seed_system(&3, &player);
+        env.ledger().set_timestamp(500);
+
+        fx.client.deploy_fleet(&player, &3);
+
+        assert_eq!(fx.client.get_fleet(&player).location, 3);
+    }
+
+    #[test]
+    fn deploy_fleet_allows_an_empty_fleet() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        fx.galaxy.seed_system(&2, &player);
+
+        fx.client.deploy_fleet(&player, &2);
+
+        assert_eq!(fx.client.get_fleet(&player).location, 2);
+    }
+
+    #[test]
+    fn deploy_fleet_records_move_timestamp() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        fx.galaxy.seed_system(&1, &player);
+        env.ledger().set_timestamp(777);
+
+        fx.client.deploy_fleet(&player, &1);
+
+        assert_eq!(fx.client.get_fleet(&player).last_moved, 777);
+    }
+
+    #[test]
+    fn deploy_fleet_requires_player_authorization() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        fx.galaxy.seed_system(&1, &player);
+
+        fx.client.deploy_fleet(&player, &1);
+
+        let (authorizer, _) = env.auths().into_iter().next().unwrap();
+        assert_eq!(authorizer, player);
+    }
+
+    #[test]
+    fn deploy_fleet_emits_deployed_event() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        fx.galaxy.seed_system(&2, &player);
+
+        fx.client.deploy_fleet(&player, &2);
+
+        let (contract, topics, data) = env
+            .events()
+            .all()
+            .into_iter()
+            .filter(|(c, _, _)| *c == fx.client.address)
+            .last()
+            .unwrap();
+        assert_eq!(contract, fx.client.address);
+        assert_eq!(topics, (symbol_short!("deployed"), player).into_val(&env));
+        let system_id: u32 = data.into_val(&env);
+        assert_eq!(system_id, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "player does not own this system")]
+    fn deploy_fleet_panics_for_a_system_the_player_does_not_own() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let owner = Address::generate(&env);
+        let stranger = Address::generate(&env);
+        fx.galaxy.seed_system(&3, &owner);
+
+        fx.client.deploy_fleet(&stranger, &3);
+    }
+
+    #[test]
+    #[should_panic(expected = "fleet already deployed")]
+    fn deploy_fleet_cannot_be_called_twice() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        fx.galaxy.seed_system(&1, &player);
+        fx.client.deploy_fleet(&player, &1);
+
+        fx.client.deploy_fleet(&player, &2);
+    }
+
     // ── move_fleet ────────────────────────────────────────────────────────────
 
     fn fleet_with_one_scout(env: &Env, fx: &Fixture<'_>) -> Address {
         let player = Address::generate(env);
         fx.client.build_unit(&player, &UnitType::Scout, &1);
+        // Deploy at system 0 while the clock reads 0, then advance so the
+        // first move is past cooldown.
+        fx.galaxy.seed_system(&0, &player);
+        fx.client.deploy_fleet(&player, &0);
         env.ledger().set_timestamp(1_000);
         player
     }
@@ -679,6 +890,18 @@ mod tests {
         let env = Env::default();
         let fx = setup_fleet(&env);
         let player = Address::generate(&env);
+        env.ledger().set_timestamp(1_000);
+
+        fx.client.move_fleet(&player, &1);
+    }
+
+    #[test]
+    #[should_panic(expected = "fleet is not deployed")]
+    fn move_fleet_panics_when_fleet_is_not_deployed() {
+        let env = Env::default();
+        let fx = setup_fleet(&env);
+        let player = Address::generate(&env);
+        fx.client.build_unit(&player, &UnitType::Scout, &1);
         env.ledger().set_timestamp(1_000);
 
         fx.client.move_fleet(&player, &1);
