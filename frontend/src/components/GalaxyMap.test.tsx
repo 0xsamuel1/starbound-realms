@@ -101,6 +101,44 @@ describe('GalaxyMap', () => {
     expect(selected).toBe(3);
   });
 
+  it('makes each cell focusable as a button when selection is enabled', () => {
+    const systems = [makeSystem({ systemId: 4 })];
+
+    render(<GalaxyMap systems={systems} walletAddress={null} onSelectSystem={() => {}} />);
+
+    const cell = screen.getByTestId('galaxy-cell-4');
+    expect(cell).toHaveAttribute('tabindex', '0');
+    expect(cell).toHaveAttribute('role', 'button');
+  });
+
+  it('leaves cells out of the tab order when selection is disabled', () => {
+    const systems = [makeSystem({ systemId: 4 })];
+
+    render(<GalaxyMap systems={systems} walletAddress={null} />);
+
+    expect(screen.getByTestId('galaxy-cell-4')).not.toHaveAttribute('tabindex');
+  });
+
+  it.each(['Enter', ' '])('calls onSelectSystem when a cell receives the %j key', (key) => {
+    const systems = [makeSystem({ systemId: 6 })];
+    let selected: number | null = null;
+
+    render(<GalaxyMap systems={systems} walletAddress={null} onSelectSystem={(id) => (selected = id)} />);
+    fireEvent.keyDown(screen.getByTestId('galaxy-cell-6'), { key });
+
+    expect(selected).toBe(6);
+  });
+
+  it('ignores other keys on a cell', () => {
+    const systems = [makeSystem({ systemId: 6 })];
+    let selected: number | null = null;
+
+    render(<GalaxyMap systems={systems} walletAddress={null} onSelectSystem={(id) => (selected = id)} />);
+    fireEvent.keyDown(screen.getByTestId('galaxy-cell-6'), { key: 'a' });
+
+    expect(selected).toBeNull();
+  });
+
   it('renders an empty grid without errors when there are no systems', () => {
     render(<GalaxyMap systems={[]} walletAddress={null} />);
 

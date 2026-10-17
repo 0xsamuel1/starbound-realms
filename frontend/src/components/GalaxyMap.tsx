@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from 'react';
 import { GalaxySystem } from '../hooks/useGalaxyData';
 
 const CELL_SIZE = 32;
@@ -34,6 +35,14 @@ export function GalaxyMap({ systems, walletAddress, onSelectSystem }: GalaxyMapP
   const svgWidth = width * (CELL_SIZE + CELL_GAP);
   const svgHeight = height * (CELL_SIZE + CELL_GAP);
 
+  const handleCellKeyDown = (event: KeyboardEvent<SVGRectElement>, systemId: number) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    onSelectSystem?.(systemId);
+  };
+
   return (
     <svg
       viewBox={`0 0 ${svgWidth || CELL_SIZE} ${svgHeight || CELL_SIZE}`}
@@ -53,7 +62,11 @@ export function GalaxyMap({ systems, walletAddress, onSelectSystem }: GalaxyMapP
           fill={getSystemColor(system, walletAddress)}
           stroke="var(--border)"
           style={{ cursor: onSelectSystem ? 'pointer' : 'default' }}
+          role={onSelectSystem ? 'button' : undefined}
+          tabIndex={onSelectSystem ? 0 : undefined}
+          aria-label={onSelectSystem ? `System ${system.systemId}: ${system.resourceType}` : undefined}
           onClick={() => onSelectSystem?.(system.systemId)}
+          onKeyDown={(event) => handleCellKeyDown(event, system.systemId)}
         >
           <title>{`System ${system.systemId} — ${system.resourceType}`}</title>
         </rect>
