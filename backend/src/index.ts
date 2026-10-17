@@ -6,6 +6,7 @@ import { createBattleRouter } from './api/routes/battle';
 import { createFleetRouter } from './api/routes/fleet';
 import { standardLimiter, strictLimiter } from './api/middleware/rateLimit';
 import { errorHandler } from './api/middleware/errorHandler';
+import { startIndexer } from './indexer/indexer';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,7 +39,40 @@ app.listen(PORT, () => {
   console.log(`Starbound Realms API running on port ${PORT}`);
 });
 
+startIndexerIfConfigured();
+
 export default app;
+
+// ── Indexer ───────────────────────────────────────────────────────────────────
+
+/** Reads the CONTRACT_* env vars, dropping any that aren't set. */
+function readIndexerContractIds(): string[] {
+  return [
+    process.env.CONTRACT_GALAXY_MAP,
+    process.env.CONTRACT_RESOURCES,
+    process.env.CONTRACT_FLEET,
+    process.env.CONTRACT_BATTLE,
+  ].filter((id): id is string => Boolean(id));
+}
+
+/** Starts the event listener when an RPC URL and at least one contract are configured. */
+function startIndexerIfConfigured() {
+  const rpcUrl = process.env.SOROBAN_RPC_URL;
+  const contractIds = readIndexerContractIds();
+
+  if (!rpcUrl || contractIds.length === 0) {
+    console.log('Indexer disabled: SOROBAN_RPC_URL or CONTRACT_* not configured');
+    return;
+  }
+
+  startIndexer({
+    db,
+    rpcUrl,
+    contractIds,
+    pollIntervalMs: Number(process.env.INDEXER_POLL_INTERVAL_MS ?? 5000),
+    onError: (err) => console.error('Indexer poll cycle failed:', err),
+  }).catch((err) => console.error('Failed to start indexer:', err));
+}
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 

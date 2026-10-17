@@ -96,6 +96,25 @@ export async function fetchBattlesByPlayer(db: Pool, address: string) {
   return result.rows;
 }
 
+// ── Indexer State ─────────────────────────────────────────────────────────────
+
+export async function fetchIndexerCursor(db: Pool): Promise<number> {
+  const result = await db.query(
+    'SELECT last_ledger FROM indexer_state WHERE id = 1'
+  );
+  return result.rows[0] ? Number(result.rows[0].last_ledger) : 0;
+}
+
+export async function saveIndexerCursor(db: Pool, ledger: number) {
+  await db.query(
+    `INSERT INTO indexer_state (id, last_ledger, updated_at)
+     VALUES (1, $1, NOW())
+     ON CONFLICT (id)
+     DO UPDATE SET last_ledger = EXCLUDED.last_ledger, updated_at = NOW()`,
+    [ledger]
+  );
+}
+
 export async function saveBattle(
   db: Pool,
   battleId: number,

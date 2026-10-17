@@ -28,6 +28,7 @@ frontend/.env
 .stellar/
 identity/
 *.secret
+scripts/.deploy-state
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 postgres_data/

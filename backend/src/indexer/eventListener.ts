@@ -116,11 +116,7 @@ export function startEventListener(options: EventListenerOptions): EventListener
   };
 }
 
-// TODO: the ledger cursor above lives in memory only — a restart replays from
-// `startLedger` and reprocesses everything since. Persisting it to Postgres
-// (e.g. an `indexer_state` table, updated after each successful poll cycle
-// and read on startup) would fix that. Good first issue.
-//
-// TODO: not yet wired into src/index.ts. Once a persisted cursor exists,
-// call startEventListener() there with runPollCycle bound to a live
-// rpc.Server (from SOROBAN_RPC_URL) and the four CONTRACT_* env vars.
+// The cursor this loop advances is persisted to Postgres by `startIndexer`
+// (see ./indexer.ts), which reads the last processed ledger on startup and
+// writes it back after each successful cycle. `startEventListener` itself
+// stays in-memory so it can be tested without a DB.

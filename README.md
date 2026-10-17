@@ -94,7 +94,7 @@ Three resource types, each a native Stellar asset:
 | Energy | `NRGY` | Fleet movement & upkeep |
 | Plasma | `PLSM` | Advanced units & upgrades |
 
-Since they're real Stellar assets, players can trade them on the Stellar DEX, and each player sets up a one-time trustline to hold them (the app offers this after connecting a wallet). Today resources are created only by an admin mint; passive mining from owned systems is planned but not implemented yet.
+Since they're real Stellar assets, players can trade them on the Stellar DEX, and each player sets up a one-time trustline to hold them (the app offers this after connecting a wallet). Resources are minted by an admin, and owners also mine their systems' yield passively: call `resources.mine` once per period to collect `resource_yield` for every full period elapsed since the last claim. The resources contract administers the asset contracts, so mining needs only the player's own signature.
 
 ### Fleets
 Fleets are composed of units, each with attack and defense stats stored in the `fleet` contract. Players build units by spending resources, then move fleets between adjacent star systems.
