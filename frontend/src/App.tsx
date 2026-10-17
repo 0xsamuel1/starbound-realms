@@ -4,11 +4,13 @@ import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
 import { useFleetData } from './hooks/useFleetData';
 import { useResourceBalances } from './hooks/useResourceBalances';
+import { useRecentBattles } from './hooks/useRecentBattles';
 import { useTrustlines } from './hooks/useTrustlines';
 import { GalaxyMap } from './components/GalaxyMap';
 import { StarSystem } from './components/StarSystem';
 import { Fleet } from './components/Fleet';
 import { ResourceBalances } from './components/ResourceBalances';
+import { BattleFeed } from './components/BattleFeed';
 import { ResourceSetupBanner } from './components/ResourceSetupBanner';
 import { truncateAddress } from './lib/format';
 import { getStarboundClient } from './lib/starboundClient';
@@ -305,6 +307,7 @@ export default function App() {
   const { fleet, error: fleetError, refetch: refetchFleet } = useFleetData(walletAddress);
   const { balances, error: balancesError, refetch: refetchBalances } = useResourceBalances(walletAddress);
   const playerSectionRef = useRef<HTMLDivElement>(null);
+  const recentBattles = useRecentBattles(BACKEND_URL);
   const {
     missing: missingTrustlines,
     isSettingUp: settingUpTrustlines,
@@ -515,6 +518,20 @@ export default function App() {
           )}
         </section>
       )}
+
+      {/* Galaxy-wide battle feed: every player's recent battles, not just the connected wallet's. */}
+      <section style={styles.galaxySection}>
+        <h2 style={styles.galaxyTitle}>Recent Battles</h2>
+        <BattleFeed
+          battles={recentBattles.battles}
+          isLoading={recentBattles.isLoading}
+          error={recentBattles.error}
+          hasPreviousPage={recentBattles.hasPreviousPage}
+          hasNextPage={recentBattles.hasNextPage}
+          onPreviousPage={recentBattles.goToPreviousPage}
+          onNextPage={recentBattles.goToNextPage}
+        />
+      </section>
 
       {/* Features */}
       <div style={styles.features}>
