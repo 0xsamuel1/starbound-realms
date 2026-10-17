@@ -3,10 +3,12 @@ import { GalaxyClient, FleetClient, BattleClient, UnitType } from '@starbound-re
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
 import { useFleetData } from './hooks/useFleetData';
+import { useResourceBalances } from './hooks/useResourceBalances';
 import { useTrustlines } from './hooks/useTrustlines';
 import { GalaxyMap } from './components/GalaxyMap';
 import { StarSystem } from './components/StarSystem';
 import { Fleet } from './components/Fleet';
+import { ResourceBalances } from './components/ResourceBalances';
 import { ResourceSetupBanner } from './components/ResourceSetupBanner';
 import { truncateAddress } from './lib/format';
 import { getStarboundClient } from './lib/starboundClient';
@@ -300,6 +302,7 @@ export default function App() {
   );
 
   const { fleet, error: fleetError, refetch: refetchFleet } = useFleetData(walletAddress);
+  const { balances, error: balancesError, refetch: refetchBalances } = useResourceBalances(walletAddress);
   const {
     missing: missingTrustlines,
     isSettingUp: settingUpTrustlines,
@@ -320,12 +323,12 @@ export default function App() {
         await fleetClient.buildUnit(walletAddress, unitType, count, (xdr) =>
           signTransaction(xdr, client.networkPassphrase)
         );
-        await refetchFleet();
+        await Promise.all([refetchFleet(), refetchBalances()]);
       } catch (err) {
         setBuildError(err instanceof Error ? err.message : String(err));
       }
     },
-    [walletAddress, signTransaction, refetchFleet]
+    [walletAddress, signTransaction, refetchFleet, refetchBalances]
   );
 
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -495,6 +498,8 @@ export default function App() {
               {attackError && <p style={styles.walletError}>{attackError}</p>}
               {battleResult && <p style={styles.textMuted}>{battleResult}</p>}
 
+              <ResourceBalances balances={balances} />
+              {balancesError && <p style={styles.walletError}>{balancesError}</p>}
               <Fleet fleet={fleet} onBuildUnit={buildUnit} />
               {fleetError && <p style={styles.walletError}>{fleetError}</p>}
               {buildError && <p style={styles.walletError}>{buildError}</p>}
