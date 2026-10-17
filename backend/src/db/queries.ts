@@ -96,6 +96,24 @@ export async function fetchBattlesByPlayer(db: Pool, address: string) {
   return result.rows;
 }
 
+// ── Resource Events ───────────────────────────────────────────────────────────
+
+export async function saveResourceEvent(
+  db: Pool,
+  player: string,
+  resourceType: string,
+  eventType: 'mint' | 'burn' | 'mine',
+  amount: bigint,
+  ledgerSequence: number
+) {
+  await db.query(
+    `INSERT INTO resource_events
+       (player, resource_type, event_type, amount, ledger_sequence)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [player, resourceType, eventType, amount.toString(), ledgerSequence]
+  );
+}
+
 // ── Indexer State ─────────────────────────────────────────────────────────────
 
 export async function fetchIndexerCursor(db: Pool): Promise<number> {

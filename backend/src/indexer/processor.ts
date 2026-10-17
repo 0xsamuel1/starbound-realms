@@ -4,6 +4,7 @@ import {
   saveBattle,
   incrementPlayerSystemsOwned,
   decrementPlayerSystemsOwned,
+  saveResourceEvent,
 } from '../db/queries';
 
 export interface ContractEvent {
@@ -26,6 +27,15 @@ export async function processEvent(db: Pool, event: ContractEvent): Promise<void
       break;
     case 'battle_resolved':
       await processBattleResolved(db, event);
+      break;
+    case 'minted':
+      await processResourceMinted(db, event);
+      break;
+    case 'burned':
+      await processResourceBurned(db, event);
+      break;
+    case 'mined':
+      await processResourceMined(db, event);
       break;
     default:
       // Unknown event — skip silently
@@ -63,4 +73,28 @@ async function processBattleResolved(db: Pool, event: ContractEvent): Promise<vo
   const { battle_id, attacker, defender, system_id, winner, rounds } = event.value;
 
   await saveBattle(db, battle_id, attacker, defender, system_id, winner, rounds, event.ledgerSequence);
+}
+
+/** Handles minted event — topic: ["minted", player], value: [ResourceType, amount] */
+async function processResourceMinted(db: Pool, event: ContractEvent): Promise<void> {
+  const player = event.topic[1];
+  const [resourceType, amount] = event.value;
+
+  await saveResourceEvent(db, player, resourceType, 'mint', BigInt(amount), event.ledgerSequence);
+}
+
+/** Handles burned event — topic: ["burned", player], value: [ResourceType, amount] */
+async function processResourceBurned(db: Pool, event: ContractEvent): Promise<void> {
+  const player = event.topic[1];
+  const [resourceType, amount] = event.value;
+
+  await saveResourceEvent(db, player, resourceType, 'burn', BigInt(amount), event.ledgerSequence);
+}
+
+/** Handles mined event — topic: ["mined", player], value: [system_id, ResourceType, amount] */
+async function processResourceMined(db: Pool, event: ContractEvent): Promise<void> {
+  const player = event.topic[1];
+  const [, resourceType, amount] = event.value;
+
+  await saveResourceEvent(db, player, resourceType, 'mine', BigInt(amount), event.ledgerSequence);
 }

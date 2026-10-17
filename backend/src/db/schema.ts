@@ -47,7 +47,7 @@ export const CREATE_RESOURCE_EVENTS_TABLE = `
     id              BIGSERIAL PRIMARY KEY,
     player          VARCHAR(56) NOT NULL,
     resource_type   VARCHAR(10) NOT NULL CHECK (resource_type IN ('Iron', 'Energy', 'Plasma')),
-    event_type      VARCHAR(10) NOT NULL CHECK (event_type IN ('mint', 'burn')),
+    event_type      VARCHAR(10) NOT NULL CHECK (event_type IN ('mint', 'burn', 'mine')),
     amount          NUMERIC NOT NULL,
     ledger_sequence BIGINT NOT NULL,
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
