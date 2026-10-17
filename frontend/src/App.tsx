@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { GalaxyClient, FleetClient, BattleClient, UnitType } from '@starbound-realms/sdk';
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
@@ -217,7 +217,8 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0.8rem 2rem',
     fontSize: '0.95rem',
     fontWeight: 600,
-    cursor: 'default',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
 
   walletError: {
@@ -303,6 +304,7 @@ export default function App() {
 
   const { fleet, error: fleetError, refetch: refetchFleet } = useFleetData(walletAddress);
   const { balances, error: balancesError, refetch: refetchBalances } = useResourceBalances(walletAddress);
+  const playerSectionRef = useRef<HTMLDivElement>(null);
   const {
     missing: missingTrustlines,
     isSettingUp: settingUpTrustlines,
@@ -436,9 +438,13 @@ export default function App() {
 
         <div style={styles.ctaGroup}>
           {walletConnected && walletAddress ? (
-            <span style={styles.walletConnected}>
+            <button
+              type="button"
+              style={styles.walletConnected}
+              onClick={() => playerSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+            >
               ✓ Connected — {walletAddress && truncateAddress(walletAddress)}
-            </span>
+            </button>
           ) : (
             <button style={styles.btnPrimary} onClick={connectWallet}>
               Connect Freighter
@@ -498,9 +504,11 @@ export default function App() {
               {attackError && <p style={styles.walletError}>{attackError}</p>}
               {battleResult && <p style={styles.textMuted}>{battleResult}</p>}
 
-              <ResourceBalances balances={balances} />
-              {balancesError && <p style={styles.walletError}>{balancesError}</p>}
-              <Fleet fleet={fleet} onBuildUnit={buildUnit} />
+              <div ref={playerSectionRef}>
+                <ResourceBalances balances={balances} />
+                {balancesError && <p style={styles.walletError}>{balancesError}</p>}
+                <Fleet fleet={fleet} onBuildUnit={buildUnit} />
+              </div>
               {fleetError && <p style={styles.walletError}>{fleetError}</p>}
               {buildError && <p style={styles.walletError}>{buildError}</p>}
             </>
