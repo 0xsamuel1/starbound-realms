@@ -6,6 +6,8 @@ vi.mock('../db/queries', () => ({
   incrementPlayerSystemsOwned: vi.fn(),
   decrementPlayerSystemsOwned: vi.fn(),
   saveResourceEvent: vi.fn(),
+  upsertFleetSnapshot: vi.fn(),
+  applyFleetLosses: vi.fn(),
 }));
 
 import {
@@ -14,6 +16,8 @@ import {
   incrementPlayerSystemsOwned,
   decrementPlayerSystemsOwned,
   saveResourceEvent,
+  upsertFleetSnapshot,
+  applyFleetLosses,
 } from '../db/queries';
 import { processEvent, ContractEvent } from './processor';
 
@@ -25,6 +29,8 @@ beforeEach(() => {
   vi.mocked(incrementPlayerSystemsOwned).mockClear();
   vi.mocked(decrementPlayerSystemsOwned).mockClear();
   vi.mocked(saveResourceEvent).mockClear();
+  vi.mocked(upsertFleetSnapshot).mockClear();
+  vi.mocked(applyFleetLosses).mockClear();
 });
 
 describe('processEvent — claimed', () => {
@@ -124,6 +130,8 @@ describe('processEvent — unknown topic', () => {
     expect(saveBattle).not.toHaveBeenCalled();
     expect(incrementPlayerSystemsOwned).not.toHaveBeenCalled();
     expect(saveResourceEvent).not.toHaveBeenCalled();
+    expect(upsertFleetSnapshot).not.toHaveBeenCalled();
+    expect(applyFleetLosses).not.toHaveBeenCalled();
   });
 });
 
@@ -175,5 +183,46 @@ describe('processEvent — mined', () => {
     await processEvent(db, event);
 
     expect(saveResourceEvent).toHaveBeenCalledWith(db, 'GPLAYER', 'Plasma', 'mine', 25n, 700);
+  });
+});
+
+describe('processEvent — built', () => {
+  it('upserts the fleet snapshot with the built unit type and count', async () => {
+    // topic: ["built", player], value: [UnitType, count]
+    // Confirmed against contracts/fleet/src/lib.rs build_unit()
+    const event: ContractEvent = {
+      contractId: 'C_FLEET',
+      topic: ['built', 'GPLAYER'],
+      value: ['Scout', 3],
+      ledgerSequence: 800,
+    };
+
+    await processEvent(db, event);
+
+    expect(upsertFleetSnapshot).toHaveBeenCalledWith(db, 'GPLAYER', 'Scout', 3);
+  });
+});
+
+describe('processEvent — losses', () => {
+  it('applies fleet losses to the stored snapshot', async () => {
+    // topic: ["losses", player], value: Fleet struct { scouts, fighters, cruisers, dreadnoughts, ... }
+    // Confirmed against contracts/fleet/src/lib.rs apply_battle_losses()
+    const event: ContractEvent = {
+      contractId: 'C_FLEET',
+      topic: ['losses', 'GPLAYER'],
+      value: {
+        scouts: 1,
+        fighters: 2,
+        cruisers: 0,
+        dreadnoughts: 1,
+        location: 0,
+        last_moved: 0,
+      },
+      ledgerSequence: 900,
+    };
+
+    await processEvent(db, event);
+
+    expect(applyFleetLosses).toHaveBeenCalledWith(db, 'GPLAYER', 1, 2, 0, 1);
   });
 });

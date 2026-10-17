@@ -114,6 +114,64 @@ export async function saveResourceEvent(
   );
 }
 
+// ── Fleet Snapshots ───────────────────────────────────────────────────────────
+
+export async function fetchFleetSnapshot(db: Pool, address: string) {
+  const result = await db.query(
+    'SELECT * FROM fleet_snapshots WHERE address = $1',
+    [address]
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function upsertFleetSnapshot(
+  db: Pool,
+  address: string,
+  unitType: string,
+  count: number
+) {
+  const col = unitTypeToColumn(unitType);
+  await db.query(
+    `INSERT INTO fleet_snapshots (address, ${col})
+     VALUES ($1, $2)
+     ON CONFLICT (address)
+     DO UPDATE SET ${col} = fleet_snapshots.${col} + $2, updated_at = NOW()`,
+    [address, count]
+  );
+}
+
+export async function applyFleetLosses(
+  db: Pool,
+  address: string,
+  scouts: number,
+  fighters: number,
+  cruisers: number,
+  dreadnoughts: number
+) {
+  await db.query(
+    `UPDATE fleet_snapshots
+     SET
+       scouts       = GREATEST(scouts       - $2, 0),
+       fighters     = GREATEST(fighters     - $3, 0),
+       cruisers     = GREATEST(cruisers     - $4, 0),
+       dreadnoughts = GREATEST(dreadnoughts - $5, 0),
+       updated_at   = NOW()
+     WHERE address = $1`,
+    [address, scouts, fighters, cruisers, dreadnoughts]
+  );
+}
+
+function unitTypeToColumn(unitType: string): string {
+  switch (unitType) {
+    case 'Scout':       return 'scouts';
+    case 'Fighter':     return 'fighters';
+    case 'Cruiser':     return 'cruisers';
+    case 'Dreadnought': return 'dreadnoughts';
+    default:
+      throw new Error(`Unknown unit type: ${unitType}`);
+  }
+}
+
 // ── Indexer State ─────────────────────────────────────────────────────────────
 
 export async function fetchIndexerCursor(db: Pool): Promise<number> {

@@ -5,6 +5,8 @@ import {
   incrementPlayerSystemsOwned,
   decrementPlayerSystemsOwned,
   saveResourceEvent,
+  upsertFleetSnapshot,
+  applyFleetLosses,
 } from '../db/queries';
 
 export interface ContractEvent {
@@ -36,6 +38,12 @@ export async function processEvent(db: Pool, event: ContractEvent): Promise<void
       break;
     case 'mined':
       await processResourceMined(db, event);
+      break;
+    case 'built':
+      await processUnitsBuilt(db, event);
+      break;
+    case 'losses':
+      await processFleetLosses(db, event);
       break;
     default:
       // Unknown event — skip silently
@@ -97,4 +105,33 @@ async function processResourceMined(db: Pool, event: ContractEvent): Promise<voi
   const [, resourceType, amount] = event.value;
 
   await saveResourceEvent(db, player, resourceType, 'mine', BigInt(amount), event.ledgerSequence);
+}
+
+/**
+ * Handles built event — topic: ["built", player], value: [UnitType, count]
+ * Upserts the player's fleet_snapshot, incrementing the built unit type's count.
+ */
+async function processUnitsBuilt(db: Pool, event: ContractEvent): Promise<void> {
+  const player = event.topic[1];
+  const [unitType, count] = event.value;
+
+  await upsertFleetSnapshot(db, player, unitType, Number(count));
+}
+
+/**
+ * Handles losses event — topic: ["losses", player], value: Fleet struct
+ * Subtracts lost units from the stored snapshot, clamped at zero.
+ */
+async function processFleetLosses(db: Pool, event: ContractEvent): Promise<void> {
+  const player = event.topic[1];
+  const { scouts, fighters, cruisers, dreadnoughts } = event.value;
+
+  await applyFleetLosses(
+    db,
+    player,
+    Number(scouts),
+    Number(fighters),
+    Number(cruisers),
+    Number(dreadnoughts)
+  );
 }
