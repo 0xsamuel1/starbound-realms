@@ -62,10 +62,24 @@ export const CREATE_INDEXER_STATE_TABLE = `
   );
 `;
 
+export const CREATE_FLEET_SNAPSHOTS_TABLE = `
+  CREATE TABLE IF NOT EXISTS fleet_snapshots (
+    address         VARCHAR(56) PRIMARY KEY,
+    scouts          INTEGER NOT NULL DEFAULT 0,
+    fighters        INTEGER NOT NULL DEFAULT 0,
+    cruisers        INTEGER NOT NULL DEFAULT 0,
+    dreadnoughts    INTEGER NOT NULL DEFAULT 0,
+    location        INTEGER,
+    last_moved      BIGINT,
+    updated_at      TIMESTAMP NOT NULL DEFAULT NOW()
+  );
+`;
+
 export const ALL_TABLES = [
   CREATE_STAR_SYSTEMS_TABLE,
   CREATE_PLAYERS_TABLE,
   CREATE_BATTLES_TABLE,
   CREATE_RESOURCE_EVENTS_TABLE,
   CREATE_INDEXER_STATE_TABLE,
+  CREATE_FLEET_SNAPSHOTS_TABLE,
 ];

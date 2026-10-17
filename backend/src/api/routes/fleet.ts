@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Pool } from 'pg';
-import { fetchPlayerByAddress } from '../../db/queries';
+import { fetchPlayerByAddress, fetchFleetSnapshot } from '../../db/queries';
 
 export function createFleetRouter(db: Pool): Router {
   const router = Router();
@@ -16,8 +16,6 @@ function fetchPlayerFleet(db: Pool) {
     try {
       const address = validateStellarAddress(req.params.address);
 
-      // TODO: query fleet_snapshots table once indexer writes fleet data
-      // For now return player existence check + empty fleet shape
       const player = await fetchPlayerByAddress(db, address);
 
       if (!player) {
@@ -25,15 +23,17 @@ function fetchPlayerFleet(db: Pool) {
         return;
       }
 
+      const snapshot = await fetchFleetSnapshot(db, address);
+
       res.json({
         address,
         fleet: {
-          scouts: 0,
-          fighters: 0,
-          cruisers: 0,
-          dreadnoughts: 0,
-          location: null,
-          lastMoved: null,
+          scouts:       snapshot?.scouts       ?? 0,
+          fighters:     snapshot?.fighters     ?? 0,
+          cruisers:     snapshot?.cruisers     ?? 0,
+          dreadnoughts: snapshot?.dreadnoughts ?? 0,
+          location:     snapshot?.location     ?? null,
+          lastMoved:    snapshot?.last_moved   ?? null,
         },
       });
     } catch (err) {
