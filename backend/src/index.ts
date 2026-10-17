@@ -4,6 +4,7 @@ import { createGalaxyRouter } from './api/routes/galaxy';
 import { createPlayerRouter } from './api/routes/player';
 import { createBattleRouter } from './api/routes/battle';
 import { createFleetRouter } from './api/routes/fleet';
+import { createLeaderboardRouter } from './api/routes/leaderboard';
 import { standardLimiter, strictLimiter } from './api/middleware/rateLimit';
 import { errorHandler } from './api/middleware/errorHandler';
 import { startIndexer } from './indexer/indexer';
@@ -27,7 +28,7 @@ app.use('/galaxy', createGalaxyRouter(db));
 app.use('/player', createPlayerRouter(db));
 app.use('/battles', createBattleRouter(db));
 app.use('/fleet', createFleetRouter(db));
-app.get('/leaderboard', strictLimiter, handleLeaderboard(db));
+app.use('/leaderboard', strictLimiter, createLeaderboardRouter(db));
 
 // ── Error handler (must be last) ──────────────────────────────────────────────
 
@@ -78,16 +79,4 @@ function startIndexerIfConfigured() {
 
 function handleHealthCheck(_req: express.Request, res: express.Response) {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
-}
-
-function handleLeaderboard(db: Pool) {
-  return async (_req: express.Request, res: express.Response, next: express.NextFunction) => {
-    try {
-      const { fetchLeaderboard } = await import('./db/queries');
-      const players = await fetchLeaderboard(db);
-      res.json({ players });
-    } catch (err) {
-      next(err);
-    }
-  };
 }

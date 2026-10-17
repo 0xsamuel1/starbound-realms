@@ -5,6 +5,7 @@ vi.mock('../db/queries', () => ({
   saveBattle: vi.fn(),
   incrementPlayerSystemsOwned: vi.fn(),
   decrementPlayerSystemsOwned: vi.fn(),
+  saveResourceEvent: vi.fn(),
 }));
 
 import {
@@ -12,6 +13,7 @@ import {
   saveBattle,
   incrementPlayerSystemsOwned,
   decrementPlayerSystemsOwned,
+  saveResourceEvent,
 } from '../db/queries';
 import { processEvent, ContractEvent } from './processor';
 
@@ -22,6 +24,7 @@ beforeEach(() => {
   vi.mocked(saveBattle).mockClear();
   vi.mocked(incrementPlayerSystemsOwned).mockClear();
   vi.mocked(decrementPlayerSystemsOwned).mockClear();
+  vi.mocked(saveResourceEvent).mockClear();
 });
 
 describe('processEvent — claimed', () => {
@@ -110,7 +113,7 @@ describe('processEvent — unknown topic', () => {
   it('skips silently without calling any handler', async () => {
     const event: ContractEvent = {
       contractId: 'C1',
-      topic: ['minted'],
+      topic: ['unknown_event'],
       value: {},
       ledgerSequence: 400,
     };
@@ -120,5 +123,57 @@ describe('processEvent — unknown topic', () => {
     expect(upsertStarSystem).not.toHaveBeenCalled();
     expect(saveBattle).not.toHaveBeenCalled();
     expect(incrementPlayerSystemsOwned).not.toHaveBeenCalled();
+    expect(saveResourceEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('processEvent — minted', () => {
+  it('saves a mint resource event', async () => {
+    // topic: ["minted", player], value: [ResourceType, i128 as BigInt]
+    // Confirmed against contracts/resources/src/lib.rs mint()
+    const event: ContractEvent = {
+      contractId: 'C_RESOURCES',
+      topic: ['minted', 'GPLAYER'],
+      value: ['Iron', 50n],
+      ledgerSequence: 500,
+    };
+
+    await processEvent(db, event);
+
+    expect(saveResourceEvent).toHaveBeenCalledWith(db, 'GPLAYER', 'Iron', 'mint', 50n, 500);
+  });
+});
+
+describe('processEvent — burned', () => {
+  it('saves a burn resource event', async () => {
+    // topic: ["burned", player], value: [ResourceType, i128 as BigInt]
+    // Confirmed against contracts/resources/src/lib.rs burn()
+    const event: ContractEvent = {
+      contractId: 'C_RESOURCES',
+      topic: ['burned', 'GPLAYER'],
+      value: ['Energy', 20n],
+      ledgerSequence: 600,
+    };
+
+    await processEvent(db, event);
+
+    expect(saveResourceEvent).toHaveBeenCalledWith(db, 'GPLAYER', 'Energy', 'burn', 20n, 600);
+  });
+});
+
+describe('processEvent — mined', () => {
+  it('saves a mine resource event using the resource type and amount from value', async () => {
+    // topic: ["mined", player], value: [system_id: u32, ResourceType, i128 as BigInt]
+    // Confirmed against contracts/resources/src/lib.rs mine()
+    const event: ContractEvent = {
+      contractId: 'C_RESOURCES',
+      topic: ['mined', 'GPLAYER'],
+      value: [3, 'Plasma', 25n],
+      ledgerSequence: 700,
+    };
+
+    await processEvent(db, event);
+
+    expect(saveResourceEvent).toHaveBeenCalledWith(db, 'GPLAYER', 'Plasma', 'mine', 25n, 700);
   });
 });
