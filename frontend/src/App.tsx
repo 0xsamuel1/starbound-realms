@@ -1,12 +1,16 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { GalaxyClient, FleetClient, BattleClient, UnitType } from '@starbound-realms/sdk';
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
 import { useFleetData } from './hooks/useFleetData';
+import { useResourceBalances } from './hooks/useResourceBalances';
+import { useRecentBattles } from './hooks/useRecentBattles';
 import { useTrustlines } from './hooks/useTrustlines';
 import { GalaxyMap } from './components/GalaxyMap';
 import { StarSystem } from './components/StarSystem';
 import { Fleet } from './components/Fleet';
+import { ResourceBalances } from './components/ResourceBalances';
+import { BattleFeed } from './components/BattleFeed';
 import { ResourceSetupBanner } from './components/ResourceSetupBanner';
 import { truncateAddress } from './lib/format';
 import { getStarboundClient } from './lib/starboundClient';
@@ -215,7 +219,8 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0.8rem 2rem',
     fontSize: '0.95rem',
     fontWeight: 600,
-    cursor: 'default',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
   },
 
   walletError: {
@@ -300,6 +305,9 @@ export default function App() {
   );
 
   const { fleet, error: fleetError, refetch: refetchFleet } = useFleetData(walletAddress);
+  const { balances, error: balancesError, refetch: refetchBalances } = useResourceBalances(walletAddress);
+  const playerSectionRef = useRef<HTMLDivElement>(null);
+  const recentBattles = useRecentBattles(BACKEND_URL);
   const {
     missing: missingTrustlines,
     isSettingUp: settingUpTrustlines,
@@ -320,12 +328,12 @@ export default function App() {
         await fleetClient.buildUnit(walletAddress, unitType, count, (xdr) =>
           signTransaction(xdr, client.networkPassphrase)
         );
-        await refetchFleet();
+        await Promise.all([refetchFleet(), refetchBalances()]);
       } catch (err) {
         setBuildError(err instanceof Error ? err.message : String(err));
       }
     },
-    [walletAddress, signTransaction, refetchFleet]
+    [walletAddress, signTransaction, refetchFleet, refetchBalances]
   );
 
   const [moveError, setMoveError] = useState<string | null>(null);
@@ -433,9 +441,13 @@ export default function App() {
 
         <div style={styles.ctaGroup}>
           {walletConnected && walletAddress ? (
-            <span style={styles.walletConnected}>
+            <button
+              type="button"
+              style={styles.walletConnected}
+              onClick={() => playerSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+            >
               ✓ Connected — {walletAddress && truncateAddress(walletAddress)}
-            </span>
+            </button>
           ) : (
             <button style={styles.btnPrimary} onClick={connectWallet}>
               Connect Freighter
@@ -495,13 +507,31 @@ export default function App() {
               {attackError && <p style={styles.walletError}>{attackError}</p>}
               {battleResult && <p style={styles.textMuted}>{battleResult}</p>}
 
-              <Fleet fleet={fleet} onBuildUnit={buildUnit} />
+              <div ref={playerSectionRef}>
+                <ResourceBalances balances={balances} />
+                {balancesError && <p style={styles.walletError}>{balancesError}</p>}
+                <Fleet fleet={fleet} onBuildUnit={buildUnit} />
+              </div>
               {fleetError && <p style={styles.walletError}>{fleetError}</p>}
               {buildError && <p style={styles.walletError}>{buildError}</p>}
             </>
           )}
         </section>
       )}
+
+      {/* Galaxy-wide battle feed: every player's recent battles, not just the connected wallet's. */}
+      <section style={styles.galaxySection}>
+        <h2 style={styles.galaxyTitle}>Recent Battles</h2>
+        <BattleFeed
+          battles={recentBattles.battles}
+          isLoading={recentBattles.isLoading}
+          error={recentBattles.error}
+          hasPreviousPage={recentBattles.hasPreviousPage}
+          hasNextPage={recentBattles.hasNextPage}
+          onPreviousPage={recentBattles.goToPreviousPage}
+          onNextPage={recentBattles.goToNextPage}
+        />
+      </section>
 
       {/* Features */}
       <div style={styles.features}>
