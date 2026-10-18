@@ -1,5 +1,7 @@
-export { StarboundClient } from './client.js';
-export type { StarboundClientConfig, ContractIds, TransactionSigner, WriteCallOptions, ClassicCallOptions } from './client.js';
+export { StarboundClient, withRetry } from './client.js';
+export type { StarboundClientConfig, ContractIds, TransactionSigner, WriteCallOptions, ClassicCallOptions, RetryOptions } from './client.js';
+
+export { NetworkError, SimulationError, TransactionRejectedError, TransactionFailedError, isTransientNetworkError } from './errors.js';
 
 export { GalaxyClient } from './galaxy.js';
 export type { StarSystem } from './galaxy.js';

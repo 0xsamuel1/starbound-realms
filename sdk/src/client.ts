@@ -10,6 +10,13 @@ import {
   TransactionBuilder,
   xdr,
 } from '@stellar/stellar-sdk';
+import {
+  NetworkError,
+  SimulationError,
+  TransactionFailedError,
+  TransactionRejectedError,
+  isTransientNetworkError,
+} from './errors.js';
 
 /** Signs an unsigned transaction XDR string and returns the signed XDR string. */
 export type TransactionSigner = (xdr: string) => Promise<string>;
@@ -39,6 +46,50 @@ export interface StarboundClientConfig {
   contractIds: ContractIds;
 }
 
+export interface RetryOptions {
+  /** Maximum number of attempts (default: 3). */
+  maxAttempts?: number;
+  /** Base delay in milliseconds between attempts, doubled on each retry (default: 500). */
+  baseDelayMs?: number;
+}
+
+/**
+ * Retries `fn` up to `maxAttempts` times, using exponential backoff, but ONLY
+ * when the thrown error is a transient network error. Any other error is
+ * re-thrown immediately without retrying.
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<T> {
+  const maxAttempts = options.maxAttempts ?? 3;
+  const baseDelayMs = options.baseDelayMs ?? 500;
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isTransientNetworkError(err)) {
+        // Not a transient error — fail immediately, no retry.
+        throw err;
+      }
+      lastError = err;
+      if (attempt < maxAttempts) {
+        const delay = baseDelayMs * Math.pow(2, attempt - 1);
+        await sleep(delay);
+      }
+    }
+  }
+  // All attempts exhausted — wrap in NetworkError.
+  const originalMessage = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new NetworkError(originalMessage);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class StarboundClient {
   public readonly server: rpc.Server;
   public readonly networkPassphrase: string;
@@ -62,10 +113,14 @@ export class StarboundClient {
   /**
    * Simulates a read-only contract call and returns its decoded native
    * result. Never submits a transaction — no account needs to be funded.
+   *
+   * Transient network errors are retried up to 3 times with exponential
+   * backoff. A genuine simulation error (contract panic, bad args, etc.)
+   * fails immediately — it would not succeed on a retry.
    */
   async simulateReadCall(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<any> {
     const tx = buildReadCallTransaction(this.networkPassphrase, contractId, method, args);
-    const simulation = await this.server.simulateTransaction(tx);
+    const simulation = await withRetry(() => this.server.simulateTransaction(tx));
     return decodeSimulationResult(method, simulation);
   }
 
@@ -74,11 +129,16 @@ export class StarboundClient {
    * never sees a private key here — it's the caller's job to actually sign
    * (Freighter in the frontend, a Keypair in a script), keeping this client
    * signer-agnostic.
+   *
+   * The account-fetch and prepare steps are retried on transient network
+   * errors. `sendTransaction` itself is NOT blindly retried: re-submitting an
+   * already-accepted transaction would be a no-op at best (DUPLICATE) but
+   * could cause confusion, so we let the caller decide how to handle that.
    */
   async submitTransaction(options: WriteCallOptions): Promise<rpc.Api.GetSuccessfulTransactionResponse> {
-    const account = await this.server.getAccount(options.sourceAddress);
+    const account = await withRetry(() => this.server.getAccount(options.sourceAddress));
     const unprepared = buildUnpreparedTransaction(this.networkPassphrase, account, [options.operation]);
-    const prepared = await this.server.prepareTransaction(unprepared);
+    const prepared = await withRetry(() => this.server.prepareTransaction(unprepared));
     return this.signAndConfirm(prepared, options.sign);
   }
 
@@ -87,9 +147,11 @@ export class StarboundClient {
    * operations, such as trustlines. Skips simulation entirely: RPC's
    * prepareTransaction rejects classic operations outright
    * ("unsupported operation type"), verified against testnet.
+   *
+   * The account-fetch step is retried on transient network errors.
    */
   async submitClassicTransaction(options: ClassicCallOptions): Promise<rpc.Api.GetSuccessfulTransactionResponse> {
-    const account = await this.server.getAccount(options.sourceAddress);
+    const account = await withRetry(() => this.server.getAccount(options.sourceAddress));
     const tx = buildUnpreparedTransaction(this.networkPassphrase, account, options.operations);
     return this.signAndConfirm(tx, options.sign);
   }
@@ -122,7 +184,7 @@ function buildUnpreparedTransaction(networkPassphrase: string, account: Account,
 /** Throws if the network didn't accept the transaction for processing. */
 function verifySendWasAccepted(send: rpc.Api.SendTransactionResponse): void {
   if (send.status !== 'PENDING' && send.status !== 'DUPLICATE') {
-    throw new Error(`transaction rejected: ${send.status}`);
+    throw new TransactionRejectedError(`transaction rejected: ${send.status}`);
   }
 }
 
@@ -131,7 +193,7 @@ function verifyTransactionSucceeded(
   result: rpc.Api.GetTransactionResponse
 ): rpc.Api.GetSuccessfulTransactionResponse {
   if (result.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-    throw new Error(`transaction failed: ${result.status}`);
+    throw new TransactionFailedError(`transaction failed: ${result.status}`);
   }
   return result;
 }
@@ -157,10 +219,10 @@ function buildReadCallTransaction(
 /** Extracts and decodes a simulated read call's return value, or throws its error. */
 function decodeSimulationResult(method: string, simulation: rpc.Api.SimulateTransactionResponse): any {
   if (rpc.Api.isSimulationError(simulation)) {
-    throw new Error(`${method}: simulation failed — ${simulation.error}`);
+    throw new SimulationError(`${method}: simulation failed — ${simulation.error}`);
   }
   if (!simulation.result) {
-    throw new Error(`${method}: simulation returned no result`);
+    throw new SimulationError(`${method}: simulation returned no result`);
   }
   return scValToNative(simulation.result.retval);
 }

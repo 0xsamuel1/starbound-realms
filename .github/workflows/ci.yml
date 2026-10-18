@@ -126,7 +126,7 @@ jobs:
         run: pnpm run build
         working-directory: sdk
 
-      - name: Run frontend tests
+      - name: Run frontend tests with coverage
         run: pnpm test
         working-directory: frontend
 
