@@ -1,5 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { GalaxyClient, FleetClient, BattleClient, UnitType } from '@starbound-realms/sdk';
+import React from 'react';
 import { useStellar } from './hooks/useStellar';
 import { useGalaxyData } from './hooks/useGalaxyData';
 import { useFleetData } from './hooks/useFleetData';
@@ -231,25 +230,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.85rem',
     marginTop: '-0.75rem',
   },
-
-  galaxySection: {
-    maxWidth: '900px',
-    width: '100%',
-    margin: '3rem auto 0',
-    padding: '0 2rem',
-  },
-
-  galaxyTitle: {
-    fontSize: '1.1rem',
-    fontWeight: 700,
-    marginBottom: '1rem',
-    color: 'var(--text)',
-  },
-
-  textMuted: {
-    color: 'var(--text-muted)',
-    fontSize: '0.9rem',
-  },
 };
 
 // ── Feature data ──────────────────────────────────────────────────────────────
@@ -282,120 +262,6 @@ const features = [
 export default function App() {
   const { walletAddress, isConnected: walletConnected, error: walletError, connectWallet, signTransaction } =
     useStellar();
-  const { systems, isLoading: galaxyLoading, error: galaxyError, refetch: refetchGalaxy } =
-    useGalaxyData(BACKEND_URL);
-  const [selectedSystemId, setSelectedSystemId] = useState<number | null>(null);
-  const [claimError, setClaimError] = useState<string | null>(null);
-  const selectedSystem = systems.find((s) => s.systemId === selectedSystemId) ?? null;
-
-  const claimSystem = useCallback(
-    async (systemId: number) => {
-      if (!walletAddress) {
-        return;
-      }
-      setClaimError(null);
-      try {
-        const client = getStarboundClient();
-        const galaxy = new GalaxyClient(client);
-        await galaxy.claimSystem(walletAddress, systemId, (xdr) => signTransaction(xdr, client.networkPassphrase));
-        await refetchGalaxy();
-        setSelectedSystemId(null);
-      } catch (err) {
-        setClaimError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [walletAddress, signTransaction, refetchGalaxy]
-  );
-
-  const { fleet, error: fleetError, refetch: refetchFleet } = useFleetData(walletAddress);
-  const { balances, error: balancesError, refetch: refetchBalances } = useResourceBalances(walletAddress);
-  const playerSectionRef = useRef<HTMLDivElement>(null);
-  const recentBattles = useRecentBattles(BACKEND_URL);
-  const {
-    missing: missingTrustlines,
-    isSettingUp: settingUpTrustlines,
-    error: trustlineError,
-    setUpTrustlines,
-  } = useTrustlines(walletAddress, signTransaction);
-  const [buildError, setBuildError] = useState<string | null>(null);
-
-  const buildUnit = useCallback(
-    async (unitType: UnitType, count: number) => {
-      if (!walletAddress) {
-        return;
-      }
-      setBuildError(null);
-      try {
-        const client = getStarboundClient();
-        const fleetClient = new FleetClient(client);
-        await fleetClient.buildUnit(walletAddress, unitType, count, (xdr) =>
-          signTransaction(xdr, client.networkPassphrase)
-        );
-        await Promise.all([refetchFleet(), refetchBalances()]);
-      } catch (err) {
-        setBuildError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [walletAddress, signTransaction, refetchFleet, refetchBalances]
-  );
-
-  const [moveError, setMoveError] = useState<string | null>(null);
-
-  const moveFleet = useCallback(
-    async (targetSystemId: number) => {
-      if (!walletAddress) {
-        return;
-      }
-      setMoveError(null);
-      try {
-        const client = getStarboundClient();
-        const fleetClient = new FleetClient(client);
-        await fleetClient.moveFleet(walletAddress, targetSystemId, (xdr) =>
-          signTransaction(xdr, client.networkPassphrase)
-        );
-        await refetchFleet();
-        setSelectedSystemId(null);
-      } catch (err) {
-        setMoveError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [walletAddress, signTransaction, refetchFleet]
-  );
-
-  const [attackError, setAttackError] = useState<string | null>(null);
-  const [battleResult, setBattleResult] = useState<string | null>(null);
-
-  const attackSystem = useCallback(
-    async (systemId: number) => {
-      if (!walletAddress) {
-        return;
-      }
-      const defender = systems.find((s) => s.systemId === systemId)?.owner;
-      if (!defender) {
-        return;
-      }
-      setAttackError(null);
-      setBattleResult(null);
-      try {
-        const client = getStarboundClient();
-        const battleClient = new BattleClient(client);
-        const battleId = await battleClient.resolveBattle(walletAddress, defender, systemId, (xdr) =>
-          signTransaction(xdr, client.networkPassphrase)
-        );
-        const battle = await battleClient.getBattle(battleId);
-        setBattleResult(
-          battle.winner === walletAddress
-            ? `Victory! You took system ${systemId} in ${battle.rounds} round(s).`
-            : `Defeat. Your fleet was repelled from system ${systemId} after ${battle.rounds} round(s).`
-        );
-        await Promise.all([refetchFleet(), refetchGalaxy()]);
-        setSelectedSystemId(null);
-      } catch (err) {
-        setAttackError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [walletAddress, systems, signTransaction, refetchFleet, refetchGalaxy]
-  );
 
   return (
     <div style={styles.page}>
@@ -450,9 +316,9 @@ export default function App() {
             <button
               type="button"
               style={styles.walletConnected}
-              onClick={() => playerSectionRef.current?.scrollIntoView({ behavior: 'smooth' })}
+              aria-label={`Connected wallet: ${walletAddress}`}
             >
-              ✓ Connected — {walletAddress && truncateAddress(walletAddress)}
+              ✓ Connected — {truncateAddress(walletAddress)}
             </button>
           ) : (
             <button style={styles.btnPrimary} onClick={connectWallet}>
@@ -468,7 +334,7 @@ export default function App() {
           </a>
         </div>
 
-        {walletError && <p style={styles.walletError}>{walletError}</p>}
+        {walletError && <p style={styles.walletError} role="alert">{walletError}</p>}
 
         {/* Game loop */}
         <div style={styles.gameLoop}>
@@ -483,61 +349,14 @@ export default function App() {
         </div>
       </section>
 
-      {/* Galaxy map — only meaningful once a wallet is connected, since the
-          whole point is coloring systems by ownership relative to you. */}
-      {walletConnected && (
-        <section style={styles.galaxySection}>
-          <ResourceSetupBanner
-            missing={missingTrustlines}
-            isSettingUp={settingUpTrustlines}
-            onSetUp={setUpTrustlines}
-          />
-          {trustlineError && <p style={styles.walletError}>{trustlineError}</p>}
-          <h2 style={styles.galaxyTitle}>The Galaxy</h2>
-          {galaxyLoading && <p style={styles.textMuted}>Loading galaxy...</p>}
-          {galaxyError && <p style={styles.walletError}>{galaxyError}</p>}
-          {!galaxyLoading && !galaxyError && (
-            <>
-              <GalaxyMap systems={systems} walletAddress={walletAddress} onSelectSystem={setSelectedSystemId} />
-              <StarSystem
-                system={selectedSystem}
-                walletAddress={walletAddress}
-                fleet={fleet}
-                onClose={() => setSelectedSystemId(null)}
-                onClaim={claimSystem}
-                onMoveFleet={moveFleet}
-                onAttack={attackSystem}
-              />
-              {claimError && <p style={styles.walletError}>{claimError}</p>}
-              {moveError && <p style={styles.walletError}>{moveError}</p>}
-              {attackError && <p style={styles.walletError}>{attackError}</p>}
-              {battleResult && <p style={styles.textMuted}>{battleResult}</p>}
-
-              <div ref={playerSectionRef}>
-                <ResourceBalances balances={balances} />
-                {balancesError && <p style={styles.walletError}>{balancesError}</p>}
-                <Fleet fleet={fleet} onBuildUnit={buildUnit} />
-              </div>
-              {fleetError && <p style={styles.walletError}>{fleetError}</p>}
-              {buildError && <p style={styles.walletError}>{buildError}</p>}
-            </>
-          )}
-        </section>
-      )}
-
-      {/* Galaxy-wide battle feed: every player's recent battles, not just the connected wallet's. */}
-      <section style={styles.galaxySection}>
-        <h2 style={styles.galaxyTitle}>Recent Battles</h2>
-        <BattleFeed
-          battles={recentBattles.battles}
-          isLoading={recentBattles.isLoading}
-          error={recentBattles.error}
-          hasPreviousPage={recentBattles.hasPreviousPage}
-          hasNextPage={recentBattles.hasNextPage}
-          onPreviousPage={recentBattles.goToPreviousPage}
-          onNextPage={recentBattles.goToNextPage}
+      {/* Game view — only rendered once a wallet is connected */}
+      {walletConnected && walletAddress && (
+        <GameView
+          walletAddress={walletAddress}
+          signTransaction={signTransaction}
+          backendUrl={BACKEND_URL}
         />
-      </section>
+      )}
 
       {/* Features */}
       <div style={styles.features}>
