@@ -12,6 +12,7 @@ import {
   rpc,
 } from '@stellar/stellar-sdk';
 import { StarboundClient } from './client.js';
+import { TransactionRejectedError, TransactionFailedError, NetworkError } from './errors.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 5));
 const SOURCE = Keypair.random().publicKey();
@@ -95,7 +96,19 @@ describe('submitTransaction', () => {
     expect((server.pollTransaction as any)).toHaveBeenCalledWith('HASH1');
   });
 
-  it('throws a clear error when the network rejects the transaction', async () => {
+  it('throws TransactionRejectedError (instanceof) when the network rejects the transaction', async () => {
+    const server = baseServer({
+      sendTransaction: vi.fn().mockResolvedValue({ status: 'ERROR', hash: 'HASH1', latestLedger: 1 }),
+    });
+    const client = makeClient(server);
+    const sign = vi.fn().mockImplementation(async (xdr: string) => xdr);
+
+    await expect(
+      client.submitTransaction({ sourceAddress: SOURCE, operation: new Contract(CONTRACT_ID).call('claim_system'), sign })
+    ).rejects.toBeInstanceOf(TransactionRejectedError);
+  });
+
+  it('throws a clear error matching /rejected/ when the network rejects the transaction', async () => {
     const server = baseServer({
       sendTransaction: vi.fn().mockResolvedValue({ status: 'ERROR', hash: 'HASH1', latestLedger: 1 }),
     });
@@ -107,7 +120,19 @@ describe('submitTransaction', () => {
     ).rejects.toThrow(/rejected/i);
   });
 
-  it('throws a clear error when the transaction fails on-chain', async () => {
+  it('throws TransactionFailedError (instanceof) when the transaction fails on-chain', async () => {
+    const server = baseServer({
+      pollTransaction: vi.fn().mockResolvedValue({ status: rpc.Api.GetTransactionStatus.FAILED, txHash: 'HASH1' }),
+    });
+    const client = makeClient(server);
+    const sign = vi.fn().mockImplementation(async (xdr: string) => xdr);
+
+    await expect(
+      client.submitTransaction({ sourceAddress: SOURCE, operation: new Contract(CONTRACT_ID).call('claim_system'), sign })
+    ).rejects.toBeInstanceOf(TransactionFailedError);
+  });
+
+  it('throws a clear error matching /failed/ when the transaction fails on-chain', async () => {
     const server = baseServer({
       pollTransaction: vi.fn().mockResolvedValue({ status: rpc.Api.GetTransactionStatus.FAILED, txHash: 'HASH1' }),
     });
@@ -117,6 +142,76 @@ describe('submitTransaction', () => {
     await expect(
       client.submitTransaction({ sourceAddress: SOURCE, operation: new Contract(CONTRACT_ID).call('claim_system'), sign })
     ).rejects.toThrow(/failed/i);
+  });
+
+  // ── Retry on the write path (issue #62) ─────────────────────────────────
+
+  it('retries a transient network error on getAccount and succeeds', async () => {
+    const transientErr = new Error('client error (SendRequest)');
+    const server = baseServer({
+      getAccount: vi.fn()
+        .mockRejectedValueOnce(transientErr)
+        .mockResolvedValue(new Account(SOURCE, '10')),
+    });
+    const client = makeClient(server);
+
+    await client.submitTransaction({
+      sourceAddress: SOURCE,
+      operation: new Contract(CONTRACT_ID).call('claim_system'),
+      sign: realSigner(),
+    });
+
+    expect((server.getAccount as any)).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a transient network error on prepareTransaction and succeeds', async () => {
+    const transientErr = new Error('client error (SendRequest)');
+    const server = baseServer({
+      prepareTransaction: vi.fn()
+        .mockRejectedValueOnce(transientErr)
+        .mockResolvedValue(buildRealTransaction()),
+    });
+    const client = makeClient(server);
+
+    await client.submitTransaction({
+      sourceAddress: SOURCE,
+      operation: new Contract(CONTRACT_ID).call('claim_system'),
+      sign: realSigner(),
+    });
+
+    expect((server.prepareTransaction as any)).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws NetworkError after repeated transient failures on getAccount', async () => {
+    const transientErr = new Error('client error (SendRequest)');
+    const server = baseServer({
+      getAccount: vi.fn().mockRejectedValue(transientErr),
+    });
+    const client = makeClient(server);
+    const sign = vi.fn();
+
+    await expect(
+      client.submitTransaction({ sourceAddress: SOURCE, operation: new Contract(CONTRACT_ID).call('claim_system'), sign })
+    ).rejects.toBeInstanceOf(NetworkError);
+    expect((server.getAccount as any)).toHaveBeenCalledTimes(3);
+  });
+
+  it('does NOT retry sendTransaction', async () => {
+    // sendTransaction failure should propagate without retry.
+    const server = baseServer({
+      sendTransaction: vi.fn().mockResolvedValue({ status: 'TRY_AGAIN_LATER', hash: 'HASH1', latestLedger: 1 }),
+    });
+    const client = makeClient(server);
+
+    await expect(
+      client.submitTransaction({
+        sourceAddress: SOURCE,
+        operation: new Contract(CONTRACT_ID).call('claim_system'),
+        sign: realSigner(),
+      })
+    ).rejects.toBeInstanceOf(TransactionRejectedError);
+    // Exactly one attempt.
+    expect((server.sendTransaction as any)).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -144,7 +239,18 @@ describe('submitClassicTransaction', () => {
     expect(sentTx.signatures.length).toBeGreaterThan(0);
   });
 
-  it('throws when the network rejects the transaction', async () => {
+  it('throws TransactionRejectedError (instanceof) when the network rejects the transaction', async () => {
+    const server = baseServer({
+      sendTransaction: vi.fn().mockResolvedValue({ status: 'ERROR', hash: 'HASH1', latestLedger: 1 }),
+    });
+    const client = makeClient(server);
+
+    await expect(
+      client.submitClassicTransaction({ sourceAddress: SOURCE, operations: trustOps(), sign: realSigner() })
+    ).rejects.toBeInstanceOf(TransactionRejectedError);
+  });
+
+  it('throws a clear error matching /rejected/ when the network rejects the transaction', async () => {
     const server = baseServer({
       sendTransaction: vi.fn().mockResolvedValue({ status: 'ERROR', hash: 'HASH1', latestLedger: 1 }),
     });
@@ -155,7 +261,18 @@ describe('submitClassicTransaction', () => {
     ).rejects.toThrow(/rejected/i);
   });
 
-  it('throws when the transaction fails on-chain', async () => {
+  it('throws TransactionFailedError (instanceof) when the transaction fails on-chain', async () => {
+    const server = baseServer({
+      pollTransaction: vi.fn().mockResolvedValue({ status: rpc.Api.GetTransactionStatus.FAILED, txHash: 'HASH1' }),
+    });
+    const client = makeClient(server);
+
+    await expect(
+      client.submitClassicTransaction({ sourceAddress: SOURCE, operations: trustOps(), sign: realSigner() })
+    ).rejects.toBeInstanceOf(TransactionFailedError);
+  });
+
+  it('throws a clear error matching /failed/ when the transaction fails on-chain', async () => {
     const server = baseServer({
       pollTransaction: vi.fn().mockResolvedValue({ status: rpc.Api.GetTransactionStatus.FAILED, txHash: 'HASH1' }),
     });
@@ -164,5 +281,34 @@ describe('submitClassicTransaction', () => {
     await expect(
       client.submitClassicTransaction({ sourceAddress: SOURCE, operations: trustOps(), sign: realSigner() })
     ).rejects.toThrow(/failed/i);
+  });
+
+  // ── Retry on the classic write path (issue #62) ──────────────────────────
+
+  it('retries a transient network error on getAccount in submitClassicTransaction', async () => {
+    const transientErr = new Error('client error (SendRequest)');
+    const server = baseServer({
+      getAccount: vi.fn()
+        .mockRejectedValueOnce(transientErr)
+        .mockResolvedValue(new Account(SOURCE, '10')),
+    });
+    const client = makeClient(server);
+
+    await client.submitClassicTransaction({ sourceAddress: SOURCE, operations: trustOps(), sign: realSigner() });
+
+    expect((server.getAccount as any)).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws NetworkError after repeated transient getAccount failures in classic path', async () => {
+    const transientErr = new Error('client error (SendRequest)');
+    const server = baseServer({
+      getAccount: vi.fn().mockRejectedValue(transientErr),
+    });
+    const client = makeClient(server);
+
+    await expect(
+      client.submitClassicTransaction({ sourceAddress: SOURCE, operations: trustOps(), sign: realSigner() })
+    ).rejects.toBeInstanceOf(NetworkError);
+    expect((server.getAccount as any)).toHaveBeenCalledTimes(3);
   });
 });

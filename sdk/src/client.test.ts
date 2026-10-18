@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { nativeToScVal, rpc, xdr, StrKey } from '@stellar/stellar-sdk';
 import { StarboundClient } from './client.js';
+import { SimulationError, NetworkError } from './errors.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 3));
 
@@ -51,10 +52,51 @@ describe('simulateReadCall', () => {
     expect(typeof tx.toXDR).toBe('function');
   });
 
-  it('throws a clear error when the simulation fails', async () => {
+  it('throws a SimulationError when the simulation fails', async () => {
     const simulateTransaction = vi.fn().mockResolvedValue(errorResponse('system not found'));
     const client = makeClient({ simulateTransaction });
 
     await expect(client.simulateReadCall(CONTRACT_ID, 'get_system')).rejects.toThrow('system not found');
+  });
+
+  it('throws a SimulationError (instanceof) on simulation failure', async () => {
+    const simulateTransaction = vi.fn().mockResolvedValue(errorResponse('contract panicked'));
+    const client = makeClient({ simulateTransaction });
+
+    await expect(client.simulateReadCall(CONTRACT_ID, 'get_system')).rejects.toBeInstanceOf(SimulationError);
+  });
+
+  // ── Retry behaviour (issue #61) ──────────────────────────────────────────
+
+  it('retries a transient network error and succeeds on second attempt', async () => {
+    const transientErr = new Error('client error (SendRequest)');
+    const simulateTransaction = vi.fn()
+      .mockRejectedValueOnce(transientErr)
+      .mockResolvedValue(successResponse(nativeToScVal(7, { type: 'u32' })));
+    const client = makeClient({ simulateTransaction });
+
+    const result = await client.simulateReadCall(CONTRACT_ID, 'get_grid_size');
+
+    expect(result).toBe(7);
+    expect(simulateTransaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries up to 3 attempts then throws NetworkError after repeated transient failures', async () => {
+    const transientErr = new Error('client error (SendRequest)');
+    const simulateTransaction = vi.fn().mockRejectedValue(transientErr);
+    const client = makeClient({ simulateTransaction });
+
+    await expect(client.simulateReadCall(CONTRACT_ID, 'get_grid_size')).rejects.toBeInstanceOf(NetworkError);
+    expect(simulateTransaction).toHaveBeenCalledTimes(3);
+  });
+
+  it('does NOT retry a real simulation error (contract panic)', async () => {
+    const simulateTransaction = vi.fn()
+      .mockResolvedValue(errorResponse('contract panicked: index out of range'));
+    const client = makeClient({ simulateTransaction });
+
+    await expect(client.simulateReadCall(CONTRACT_ID, 'get_system')).rejects.toBeInstanceOf(SimulationError);
+    // Only one call — no retry.
+    expect(simulateTransaction).toHaveBeenCalledTimes(1);
   });
 });

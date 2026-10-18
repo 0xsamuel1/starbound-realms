@@ -10,6 +10,13 @@ import {
   TransactionBuilder,
   xdr,
 } from '@stellar/stellar-sdk';
+import {
+  NetworkError,
+  SimulationError,
+  TransactionFailedError,
+  TransactionRejectedError,
+  isTransientNetworkError,
+} from './errors.js';
 
 /** Signs an unsigned transaction XDR string and returns the signed XDR string. */
 export type TransactionSigner = (xdr: string) => Promise<string>;
@@ -93,7 +100,7 @@ export class StarboundClient {
    */
   async simulateReadCall(contractId: string, method: string, args: xdr.ScVal[] = []): Promise<any> {
     const tx = buildReadCallTransaction(this.networkPassphrase, contractId, method, args);
-    const simulation = await this.server.simulateTransaction(tx);
+    const simulation = await withRetry(() => this.server.simulateTransaction(tx));
     return decodeSimulationResult(method, simulation);
   }
 
@@ -109,9 +116,9 @@ export class StarboundClient {
    * @throws If simulation, signing, submission, or on-chain execution fails.
    */
   async submitTransaction(options: WriteCallOptions): Promise<rpc.Api.GetSuccessfulTransactionResponse> {
-    const account = await this.server.getAccount(options.sourceAddress);
+    const account = await withRetry(() => this.server.getAccount(options.sourceAddress));
     const unprepared = buildUnpreparedTransaction(this.networkPassphrase, account, [options.operation]);
-    const prepared = await this.server.prepareTransaction(unprepared);
+    const prepared = await withRetry(() => this.server.prepareTransaction(unprepared));
     return this.signAndConfirm(prepared, options.sign);
   }
 
@@ -126,7 +133,7 @@ export class StarboundClient {
    * @throws If signing, submission, or on-chain execution fails.
    */
   async submitClassicTransaction(options: ClassicCallOptions): Promise<rpc.Api.GetSuccessfulTransactionResponse> {
-    const account = await this.server.getAccount(options.sourceAddress);
+    const account = await withRetry(() => this.server.getAccount(options.sourceAddress));
     const tx = buildUnpreparedTransaction(this.networkPassphrase, account, options.operations);
     return this.signAndConfirm(tx, options.sign);
   }
@@ -179,7 +186,7 @@ function buildUnpreparedTransaction(networkPassphrase: string, account: Account,
  */
 function verifySendWasAccepted(send: rpc.Api.SendTransactionResponse): void {
   if (send.status !== 'PENDING' && send.status !== 'DUPLICATE') {
-    throw new Error(`transaction rejected: ${send.status}`);
+    throw new TransactionRejectedError(`transaction rejected: ${send.status}`);
   }
 }
 
@@ -194,7 +201,7 @@ function verifyTransactionSucceeded(
   result: rpc.Api.GetTransactionResponse
 ): rpc.Api.GetSuccessfulTransactionResponse {
   if (result.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-    throw new Error(`transaction failed: ${result.status}`);
+    throw new TransactionFailedError(`transaction failed: ${result.status}`);
   }
   return result;
 }
@@ -235,10 +242,10 @@ function buildReadCallTransaction(
  */
 function decodeSimulationResult(method: string, simulation: rpc.Api.SimulateTransactionResponse): any {
   if (rpc.Api.isSimulationError(simulation)) {
-    throw new Error(`${method}: simulation failed — ${simulation.error}`);
+    throw new SimulationError(`${method}: simulation failed — ${simulation.error}`);
   }
   if (!simulation.result) {
-    throw new Error(`${method}: simulation returned no result`);
+    throw new SimulationError(`${method}: simulation returned no result`);
   }
   return scValToNative(simulation.result.retval);
 }
