@@ -674,4 +674,49 @@ mod tests {
         let (authorizer, _) = env.auths().into_iter().last().unwrap();
         assert_eq!(authorizer, fx.admin);
     }
+
+    // ── resource_yield = 0 (#71) ──────────────────────────────────────────────
+
+    /// Issue #71: when a system has resource_yield = 0, mine() should mint 0
+    /// tokens (periods * 0 = 0) but still advance last_mined so the clock
+    /// moves forward. Calling mine again immediately after should panic with
+    /// "nothing to mine yet", confirming last_mined was updated.
+    #[test]
+    fn mine_mints_zero_and_advances_last_mined_when_yield_is_zero() {
+        let env = Env::default();
+        let fx = setup_mining(&env);
+        env.mock_all_auths();
+
+        let player = Address::generate(&env);
+        // Seed a system with resource_yield = 0 — not reachable via normal
+        // initialize (which always assigns 10–50), but plausible after a future
+        // contract upgrade or a direct storage write during an attack scenario.
+        fx.galaxy.seed_system(&player, &ResourceType::Iron, &0u32, &1_000);
+        env.ledger().set_timestamp(1_000 + MINING_PERIOD_SECONDS);
+
+        let amount = fx.client.mine(&player, &3);
+
+        // amount = periods * resource_yield = 1 * 0 = 0
+        assert_eq!(amount, 0);
+        // Balance stays at zero — nothing was minted.
+        assert_eq!(fx.client.balance(&player, &ResourceType::Iron), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "nothing to mine yet")]
+    fn mine_advances_last_mined_even_when_yield_is_zero() {
+        // Confirm that last_mined was advanced: a second mine immediately after
+        // the first must see periods = 0 and panic, not pay out again.
+        let env = Env::default();
+        let fx = setup_mining(&env);
+        env.mock_all_auths();
+
+        let player = Address::generate(&env);
+        fx.galaxy.seed_system(&player, &ResourceType::Iron, &0u32, &1_000);
+        env.ledger().set_timestamp(1_000 + MINING_PERIOD_SECONDS);
+        fx.client.mine(&player, &3); // first mine — mints 0 but advances clock
+
+        // Timestamp has not advanced past another full period, so this must panic.
+        fx.client.mine(&player, &3);
+    }
 }

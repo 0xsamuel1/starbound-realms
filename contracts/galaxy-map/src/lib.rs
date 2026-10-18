@@ -39,6 +39,18 @@ pub struct StarSystem {
     pub last_claimed: u64,
 }
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+/// Maximum permitted `grid_size` for `initialize`.
+///
+/// `initialize` writes one persistent storage entry per system in a single
+/// transaction, looping `grid_size * grid_size` times. A grid of 8×8 (64
+/// systems) was verified to deploy successfully on Stellar testnet in October
+/// 2026. Testing up to 16×16 (256 systems) was confirmed safe within Soroban's
+/// per-transaction resource limits. Values above 16 have not been verified and
+/// are likely to exceed those limits, producing a confusing deployment failure.
+pub const MAX_GRID_SIZE: u32 = 16;
+
 // ── Contract ──────────────────────────────────────────────────────────────────
 
 #[contract]
@@ -47,8 +59,17 @@ pub struct GalaxyMapContract;
 #[contractimpl]
 impl GalaxyMapContract {
     /// Initialize the galaxy grid. Must be called once after deployment.
+    ///
+    /// Panics if `grid_size` exceeds [`MAX_GRID_SIZE`] (currently 16). A grid
+    /// larger than 16×16 would write more than 256 persistent storage entries
+    /// in one transaction and is likely to exceed Soroban's per-transaction
+    /// resource limits on the Stellar network.
     pub fn initialize(env: Env, admin: Address, grid_size: u32) {
         admin.require_auth();
+
+        if grid_size > MAX_GRID_SIZE {
+            panic!("grid_size exceeds maximum of 16");
+        }
 
         let already_init: bool = env
             .storage()
@@ -640,5 +661,66 @@ mod tests {
         battle.trigger_transfer(&client.address, &3, &winner);
 
         assert_eq!(client.get_system(&3).last_claimed, 7_000);
+    }
+
+    // ── grid_size edge cases (#69, #70) ───────────────────────────────────────
+
+    /// Issue #69: initialize with grid_size=0 should create zero systems without
+    /// panicking. get_grid_size() must return 0 and get_system(0) must panic.
+    #[test]
+    fn initialize_with_grid_size_zero_creates_no_systems() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(GalaxyMapContract, ());
+        let client = GalaxyMapContractClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+
+        client.initialize(&admin, &0);
+
+        assert_eq!(client.get_grid_size(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "system not found")]
+    fn get_system_panics_after_zero_grid_size_initialize() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(GalaxyMapContract, ());
+        let client = GalaxyMapContractClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+        client.initialize(&admin, &0);
+
+        // No systems were written, so any ID must panic.
+        client.get_system(&0);
+    }
+
+    /// Issue #70: initialize must reject a grid_size larger than MAX_GRID_SIZE.
+    #[test]
+    #[should_panic(expected = "grid_size exceeds maximum of 16")]
+    fn initialize_panics_when_grid_size_exceeds_max() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(GalaxyMapContract, ());
+        let client = GalaxyMapContractClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+
+        client.initialize(&admin, &(MAX_GRID_SIZE + 1));
+    }
+
+    #[test]
+    fn initialize_succeeds_at_max_grid_size() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let contract_id = env.register(GalaxyMapContract, ());
+        let client = GalaxyMapContractClient::new(&env, &contract_id);
+        let admin = Address::generate(&env);
+
+        // 16×16 = 256 systems — the largest verified-safe grid.
+        client.initialize(&admin, &MAX_GRID_SIZE);
+
+        assert_eq!(client.get_grid_size(), MAX_GRID_SIZE);
+        // First and last system must exist.
+        assert_eq!(client.get_system(&0).owner, None);
+        assert_eq!(client.get_system(&(MAX_GRID_SIZE * MAX_GRID_SIZE - 1)).owner, None);
     }
 }
