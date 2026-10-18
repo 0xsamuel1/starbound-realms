@@ -51,3 +51,24 @@ export function readResourceIssuer(env: Record<string, string | undefined>): str
 export function getResourceIssuer(): string {
   return readResourceIssuer(import.meta.env);
 }
+
+export const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
+export const MAINNET_PASSPHRASE = 'Public Global Stellar Network ; September 2015';
+
+export type NetworkLabel = 'Testnet' | 'Mainnet' | 'Unknown network';
+
+/** Maps a Stellar network passphrase to a human-readable network label. */
+export function getNetworkLabel(passphrase: string | undefined): NetworkLabel {
+  if (passphrase === MAINNET_PASSPHRASE) {
+    return 'Mainnet';
+  }
+  if (passphrase === TESTNET_PASSPHRASE) {
+    return 'Testnet';
+  }
+  return 'Unknown network';
+}
+
+/** Returns the label for the network configured via Vite's env vars. */
+export function getConfiguredNetworkLabel(): NetworkLabel {
+  return getNetworkLabel(import.meta.env.VITE_NETWORK_PASSPHRASE);
+}

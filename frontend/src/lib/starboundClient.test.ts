@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildStarboundClientConfig, readResourceIssuer } from './starboundClient';
+import { buildStarboundClientConfig, getNetworkLabel, readResourceIssuer } from './starboundClient';
 
 function validEnv(): Record<string, string | undefined> {
   return {
@@ -61,5 +61,20 @@ describe('readResourceIssuer', () => {
 
   it('throws when it is set to an empty string', () => {
     expect(() => readResourceIssuer({ VITE_RESOURCE_ISSUER: '' })).toThrow(/VITE_RESOURCE_ISSUER/);
+  });
+});
+
+describe('getNetworkLabel', () => {
+  it('labels the testnet passphrase as Testnet', () => {
+    expect(getNetworkLabel('Test SDF Network ; September 2015')).toBe('Testnet');
+  });
+
+  it('labels the public passphrase as Mainnet', () => {
+    expect(getNetworkLabel('Public Global Stellar Network ; September 2015')).toBe('Mainnet');
+  });
+
+  it('labels any other or missing passphrase as an unknown network', () => {
+    expect(getNetworkLabel('Standalone Network ; February 2017')).toBe('Unknown network');
+    expect(getNetworkLabel(undefined)).toBe('Unknown network');
   });
 });
