@@ -1,4 +1,4 @@
-export { StarboundClient, withRetry } from './client.js';
+export { StarboundClient, withRetry, MIN_STELLAR_SDK_VERSION, assertCompatibleStellarSdk } from './client.js';
 export type { StarboundClientConfig, ContractIds, TransactionSigner, WriteCallOptions, ClassicCallOptions, RetryOptions } from './client.js';
 
 export { NetworkError, SimulationError, TransactionRejectedError, TransactionFailedError, isTransientNetworkError } from './errors.js';

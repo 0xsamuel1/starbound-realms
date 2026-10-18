@@ -59,6 +59,79 @@ export interface StarboundClientConfig {
   contractIds: ContractIds;
 }
 
+/**
+ * Minimum tested `@stellar/stellar-sdk` version required by `@starbound-realms/sdk`.
+ *
+ * Versions prior to 17 (e.g. 13.x) lack `xdr.TransactionMeta` v4 support, which
+ * Stellar testnet returns since Protocol 23 — causing every write confirmation
+ * to throw `'Bad union switch: 4'` after landing on-chain.
+ */
+export const MIN_STELLAR_SDK_VERSION = '17.2.1';
+
+/**
+ * Verifies at runtime that the loaded `@stellar/stellar-sdk` supports
+ * Protocol 23+ `TransactionMeta` v4 XDR decoding and v17 plain-data XDR shapes.
+ *
+ * @param xdrModule - Optional XDR namespace override (used for testing).
+ * @throws If the loaded `@stellar/stellar-sdk` lacks `xdr.TransactionMeta.v4`.
+ */
+export function assertCompatibleStellarSdk(
+  xdrModule: { TransactionMeta?: { v4?: unknown } } = xdr as unknown as { TransactionMeta?: { v4?: unknown } }
+): void {
+  if (typeof xdrModule?.TransactionMeta?.v4 !== 'function') {
+    throw new Error(
+      `Incompatible @stellar/stellar-sdk: missing xdr.TransactionMeta.v4 (minimum tested version is ${MIN_STELLAR_SDK_VERSION}; v13 throws "Bad union switch: 4" on Protocol 23+ transaction confirmations)`
+    );
+  }
+}
+
+export interface RetryOptions {
+  /** Maximum number of attempts (default: 3). */
+  maxAttempts?: number;
+  /** Base delay in milliseconds between attempts, doubled on each retry (default: 500). */
+  baseDelayMs?: number;
+}
+
+/**
+ * Retries `fn` up to `maxAttempts` times, using exponential backoff, but ONLY
+ * when the thrown error is a transient network error. Any other error is
+ * re-thrown immediately without retrying.
+ *
+ * @param fn - The async operation to execute and retry on transient network errors.
+ * @param options - Optional retry configuration (`maxAttempts`, `baseDelayMs`).
+ * @returns The resolved value of `fn`.
+ * @throws {@link NetworkError} if all retry attempts fail with transient network errors, or the original error if non-transient.
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions = {}
+): Promise<T> {
+  const maxAttempts = options.maxAttempts ?? 3;
+  const baseDelayMs = options.baseDelayMs ?? 500;
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (!isTransientNetworkError(err)) {
+        throw err;
+      }
+      lastError = err;
+      if (attempt < maxAttempts) {
+        const delay = baseDelayMs * Math.pow(2, attempt - 1);
+        await sleep(delay);
+      }
+    }
+  }
+  const originalMessage = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new NetworkError(originalMessage);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** Low-level Soroban RPC wrapper shared by all SDK module clients. */
 export class StarboundClient {
   public readonly server: rpc.Server;
@@ -67,8 +140,10 @@ export class StarboundClient {
 
   /**
    * @param config - RPC endpoint, network passphrase, and deployed contract IDs.
+   * @throws If the runtime `@stellar/stellar-sdk` is incompatible (missing `xdr.TransactionMeta.v4`).
    */
   constructor(config: StarboundClientConfig) {
+    assertCompatibleStellarSdk();
     this.server = new rpc.Server(config.rpcUrl, { allowHttp: false });
     this.networkPassphrase = config.networkPassphrase;
     this.contractIds = config.contractIds;

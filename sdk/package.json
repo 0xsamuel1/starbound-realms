@@ -9,7 +9,11 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "// @stellar/stellar-sdk": "Pinned to >=17.2.1 (<18): v13 lacks xdr.TransactionMeta v4 (Protocol 23+), causing write confirmations to throw 'Bad union switch: 4' after landing on-chain (see PR #15).",
   "dependencies": {
+    "@stellar/stellar-sdk": "17.2.1"
+  },
+  "peerDependencies": {
     "@stellar/stellar-sdk": "^17.2.1"
   },
   "devDependencies": {
