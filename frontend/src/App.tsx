@@ -1,19 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStellar } from './hooks/useStellar';
-import { useGalaxyData } from './hooks/useGalaxyData';
-import { useFleetData } from './hooks/useFleetData';
-import { useResourceBalances } from './hooks/useResourceBalances';
-import { useRecentBattles } from './hooks/useRecentBattles';
-import { useTrustlines } from './hooks/useTrustlines';
-import { GalaxyMap } from './components/GalaxyMap';
-import { StarSystem } from './components/StarSystem';
-import { Fleet } from './components/Fleet';
-import { ResourceBalances } from './components/ResourceBalances';
-import { BattleFeed } from './components/BattleFeed';
-import { ResourceSetupBanner } from './components/ResourceSetupBanner';
+import { useLeaderboard } from './hooks/useLeaderboard';
 import { NetworkBadge } from './components/NetworkBadge';
+import { GameView } from './components/GameView';
+import { Leaderboard } from './components/Leaderboard';
 import { truncateAddress } from './lib/format';
-import { getConfiguredNetworkLabel, getStarboundClient } from './lib/starboundClient';
+import { getConfiguredNetworkLabel } from './lib/starboundClient';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000';
 const NETWORK_LABEL = getConfiguredNetworkLabel();
@@ -230,6 +222,20 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '0.85rem',
     marginTop: '-0.75rem',
   },
+
+  leaderboardSection: {
+    maxWidth: '900px',
+    width: '100%',
+    margin: '3rem auto 0',
+    padding: '0 2rem',
+  },
+
+  leaderboardTitle: {
+    fontSize: '1.1rem',
+    fontWeight: 700,
+    marginBottom: '1rem',
+    color: 'var(--text)',
+  },
 };
 
 // ── Feature data ──────────────────────────────────────────────────────────────
@@ -262,6 +268,7 @@ const features = [
 export default function App() {
   const { walletAddress, isConnected: walletConnected, error: walletError, connectWallet, signTransaction } =
     useStellar();
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   return (
     <div style={styles.page}>
@@ -271,6 +278,16 @@ export default function App() {
         <ul style={styles.navLinks}>
           <li>
             <NetworkBadge network={NETWORK_LABEL} />
+          </li>
+          <li>
+            <button
+              type="button"
+              style={styles.navLink}
+              onClick={() => setShowLeaderboard((open) => !open)}
+              aria-expanded={showLeaderboard}
+            >
+              Leaderboard
+            </button>
           </li>
           <li>
             <a
@@ -349,6 +366,9 @@ export default function App() {
         </div>
       </section>
 
+      {/* Leaderboard — fetched only while open, to stay under the route's rate limit */}
+      {showLeaderboard && <LeaderboardSection />}
+
       {/* Game view — only rendered once a wallet is connected */}
       {walletConnected && walletAddress && (
         <GameView
@@ -393,5 +413,22 @@ export default function App() {
         </p>
       </footer>
     </div>
+  );
+}
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+
+/**
+ * Fetches the leaderboard and renders it. Kept as a separate component so the
+ * rate-limited `GET /leaderboard` call only fires while the section is open.
+ */
+function LeaderboardSection() {
+  const { players, isLoading, error } = useLeaderboard(BACKEND_URL);
+
+  return (
+    <section style={styles.leaderboardSection}>
+      <h2 style={styles.leaderboardTitle}>Leaderboard</h2>
+      <Leaderboard players={players} isLoading={isLoading} error={error} />
+    </section>
   );
 }

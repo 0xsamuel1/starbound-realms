@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import { Pool } from 'pg';
 import { createGalaxyRouter } from './api/routes/galaxy';
 import { createPlayerRouter } from './api/routes/player';
@@ -17,6 +18,16 @@ const PORT = process.env.PORT || 3000;
 const db = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // ── Middleware ────────────────────────────────────────────────────────────────
+
+const corsOrigins = readCorsOrigins(process.env);
+
+if (corsOrigins) {
+  app.use(cors({ origin: corsOrigins }));
+} else {
+  // Without CORS_ORIGIN no Access-Control-Allow-Origin header is ever sent, so
+  // browsers reject every cross-origin request (same-origin traffic is unaffected).
+  console.log('CORS disabled: CORS_ORIGIN not configured — cross-origin requests will be rejected');
+}
 
 app.use(express.json());
 app.use(standardLimiter);
@@ -45,6 +56,23 @@ startIndexerIfConfigured();
 export default app;
 
 // ── Indexer ───────────────────────────────────────────────────────────────────
+
+/**
+ * Reads the CORS_ORIGIN env var — a comma-separated list of frontend origins
+ * (e.g. `http://localhost:5173,https://play.example.com`) — into an allow-list.
+ * Returns null when unset or empty, which disables CORS entirely.
+ */
+function readCorsOrigins(env: Record<string, string | undefined>): string[] | null {
+  const raw = env.CORS_ORIGIN;
+  if (!raw) {
+    return null;
+  }
+  const origins = raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  return origins.length > 0 ? origins : null;
+}
 
 /** Reads the CONTRACT_* env vars, dropping any that aren't set. */
 function readIndexerContractIds(): string[] {

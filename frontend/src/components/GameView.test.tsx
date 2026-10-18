@@ -70,11 +70,27 @@ const trustlinesState = {
   setUpTrustlines: vi.fn(),
 };
 
+const profileState = {
+  profile: null as { address: string; systemsOwned: number; battlesWon: number; battlesLost: number } | null,
+  isLoading: false,
+  error: null as string | null,
+  refetch: vi.fn().mockResolvedValue(undefined),
+};
+
+const historyState = {
+  battles: [] as unknown[],
+  isLoading: false,
+  error: null as string | null,
+  refetch: vi.fn().mockResolvedValue(undefined),
+};
+
 vi.mock('../hooks/useGalaxyData', () => ({ useGalaxyData: vi.fn(() => galaxyState) }));
 vi.mock('../hooks/useFleetData', () => ({ useFleetData: vi.fn(() => fleetState) }));
 vi.mock('../hooks/useResourceBalances', () => ({ useResourceBalances: vi.fn(() => balancesState) }));
 vi.mock('../hooks/useRecentBattles', () => ({ useRecentBattles: vi.fn(() => recentBattlesState) }));
 vi.mock('../hooks/useTrustlines', () => ({ useTrustlines: vi.fn(() => trustlinesState) }));
+vi.mock('../hooks/usePlayerProfile', () => ({ usePlayerProfile: vi.fn(() => profileState) }));
+vi.mock('../hooks/useBattleHistory', () => ({ useBattleHistory: vi.fn(() => historyState) }));
 
 // ── Child component mocks ─────────────────────────────────────────────────────
 
@@ -133,6 +149,18 @@ vi.mock('./ResourceSetupBanner', () => ({
   ResourceSetupBanner: () => <div data-testid="resource-setup-banner" />,
 }));
 
+vi.mock('./PlayerProfile', () => ({
+  PlayerProfile: ({ profile }: { profile: { address: string } | null }) => (
+    <div data-testid="player-profile">{profile ? <span>{profile.address}</span> : null}</div>
+  ),
+}));
+
+vi.mock('./BattleLog', () => ({
+  BattleLog: ({ isLoading }: { isLoading: boolean }) => (
+    <div data-testid="battle-log">{isLoading ? 'loading history' : 'history ready'}</div>
+  ),
+}));
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 import { GameView } from './GameView';
@@ -177,6 +205,12 @@ beforeEach(() => {
   recentBattlesState.error = null;
   trustlinesState.error = null;
   trustlinesState.missing = [];
+  profileState.profile = null;
+  profileState.isLoading = false;
+  profileState.error = null;
+  historyState.battles = [];
+  historyState.isLoading = false;
+  historyState.error = null;
   mockRefetchGalaxy.mockResolvedValue(undefined);
   mockRefetchFleet.mockResolvedValue(undefined);
   mockRefetchBalances.mockResolvedValue(undefined);
@@ -210,6 +244,49 @@ describe('GameView', () => {
 
     expect(screen.getByText(/failed to fetch galaxy/i)).toBeInTheDocument();
     expect(screen.queryByTestId('galaxy-map')).not.toBeInTheDocument();
+  });
+
+  // ── Player profile ──────────────────────────────────────────────────────────
+
+  it('requests the profile for the connected wallet address', async () => {
+    const { usePlayerProfile } = await import('../hooks/usePlayerProfile');
+    const { useGalaxyData } = await import('../hooks/useGalaxyData');
+
+    render(<GameView {...DEFAULT_PROPS} />);
+
+    expect(usePlayerProfile).toHaveBeenCalledWith('http://backend.example', 'GPLAYER');
+    expect(useGalaxyData).toHaveBeenCalled();
+  });
+
+  it('renders the player profile for the connected wallet', () => {
+    profileState.profile = {
+      address: 'GPLAYER',
+      systemsOwned: 3,
+      battlesWon: 5,
+      battlesLost: 2,
+    };
+
+    render(<GameView {...DEFAULT_PROPS} />);
+
+    expect(screen.getByTestId('player-profile')).toHaveTextContent('GPLAYER');
+    expect(screen.getByText(/your profile/i)).toBeInTheDocument();
+  });
+
+  // ── Battle history ──────────────────────────────────────────────────────────
+
+  it('requests the battle history for the connected wallet address', async () => {
+    const { useBattleHistory } = await import('../hooks/useBattleHistory');
+
+    render(<GameView {...DEFAULT_PROPS} />);
+
+    expect(useBattleHistory).toHaveBeenCalledWith('http://backend.example', 'GPLAYER');
+  });
+
+  it('renders the battle history section', () => {
+    render(<GameView {...DEFAULT_PROPS} />);
+
+    expect(screen.getByText(/battle history/i)).toBeInTheDocument();
+    expect(screen.getByTestId('battle-log')).toBeInTheDocument();
   });
 
   // ── Selection ──────────────────────────────────────────────────────────────

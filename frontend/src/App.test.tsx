@@ -26,6 +26,18 @@ vi.mock('./components/GameView', () => ({
   ),
 }));
 
+// ── useLeaderboard mock — leaderboard tab tests don't need a real fetch ─────────
+
+vi.mock('./hooks/useLeaderboard', () => ({
+  useLeaderboard: vi.fn(() => ({
+    players: [
+      { address: 'GTOPPLAYER', systemsOwned: 9, battlesWon: 4, battlesLost: 0 },
+    ],
+    isLoading: false,
+    error: null,
+  })),
+}));
+
 // ── Component under test ──────────────────────────────────────────────────────
 
 import App from './App';
@@ -108,5 +120,35 @@ describe('App — wallet connection', () => {
     render(<App />);
 
     expect(screen.queryByTestId('game-view')).not.toBeInTheDocument();
+  });
+});
+
+describe('App — leaderboard tab', () => {
+  it('hides the leaderboard by default', () => {
+    render(<App />);
+
+    expect(screen.queryByLabelText('Leaderboard')).not.toBeInTheDocument();
+  });
+
+  it('shows real leaderboard data when the Leaderboard nav item is clicked', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /leaderboard/i }));
+
+    const leaderboard = screen.getByLabelText('Leaderboard');
+    expect(leaderboard).toBeInTheDocument();
+    expect(screen.getByText('GTOPPLAYER')).toBeInTheDocument();
+    expect(screen.getByText('9 systems')).toBeInTheDocument();
+    expect(screen.getByText('#1')).toBeInTheDocument();
+  });
+
+  it('toggles the leaderboard closed when clicked again', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /leaderboard/i }));
+    expect(screen.getByLabelText('Leaderboard')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /leaderboard/i }));
+    expect(screen.queryByLabelText('Leaderboard')).not.toBeInTheDocument();
   });
 });
