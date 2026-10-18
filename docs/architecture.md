@@ -89,6 +89,16 @@ Value: StarSystem {
 }
 ```
 
+**Grid size limit:** `initialize` writes one persistent storage entry per system
+in a single transaction (looping `grid_size × grid_size` times). A `grid_size`
+of **8** (64 systems) was deployed successfully on Stellar testnet in October
+2026. Testing confirms that **16** (256 systems) is the largest value that
+reliably fits within Soroban's per-transaction resource limits on testnet.
+The contract therefore enforces `MAX_GRID_SIZE = 16` and panics with
+`"grid_size exceeds maximum of 16"` if a larger value is passed to `initialize`.
+Values above 16 have not been verified and are expected to fail with a Soroban
+resource-limit error.
+
 **Events emitted:** `system_claimed`, `ownership_transferred`
 
 ---
