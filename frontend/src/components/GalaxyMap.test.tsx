@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { getGridDimensions, getSystemColor, GalaxyMap } from './GalaxyMap';
+import { getGridDimensions, getSystemAriaLabel, getSystemColor, GalaxyMap } from './GalaxyMap';
 import { GalaxySystem } from '../hooks/useGalaxyData';
 
 function makeSystem(overrides: Partial<GalaxySystem> = {}): GalaxySystem {
@@ -44,6 +44,26 @@ describe('getSystemColor', () => {
 
   it('treats a system as unclaimed-colored when no wallet is connected, even if it has an owner', () => {
     expect(getSystemColor(makeSystem({ owner: 'GOTHER' }), null)).toBe('var(--unclaimed)');
+  });
+});
+
+describe('getSystemAriaLabel', () => {
+  it('includes the id, unclaimed ownership, and resource type', () => {
+    expect(getSystemAriaLabel(makeSystem({ systemId: 7, resourceType: 'Plasma' }), 'GME')).toBe(
+      'System 7, unclaimed, resource Plasma'
+    );
+  });
+
+  it('identifies a system owned by the connected player', () => {
+    expect(getSystemAriaLabel(makeSystem({ systemId: 3, owner: 'GME' }), 'GME')).toBe(
+      'System 3, owned by you, resource Iron'
+    );
+  });
+
+  it("includes another system owner's address", () => {
+    expect(getSystemAriaLabel(makeSystem({ systemId: 4, owner: 'GOTHER' }), 'GME')).toBe(
+      'System 4, owned by GOTHER, resource Iron'
+    );
   });
 });
 
@@ -116,7 +136,10 @@ describe('GalaxyMap', () => {
 
     render(<GalaxyMap systems={systems} walletAddress={null} />);
 
-    expect(screen.getByTestId('galaxy-cell-4')).not.toHaveAttribute('tabindex');
+    const cell = screen.getByTestId('galaxy-cell-4');
+    expect(cell).not.toHaveAttribute('tabindex');
+    expect(cell).toHaveAttribute('role', 'img');
+    expect(cell).toHaveAccessibleName('System 4, unclaimed, resource Iron');
   });
 
   it.each(['Enter', ' '])('calls onSelectSystem when a cell receives the %j key', (key) => {

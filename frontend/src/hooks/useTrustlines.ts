@@ -5,6 +5,7 @@ import { getResourceIssuer, getStarboundClient } from '../lib/starboundClient';
 export interface UseTrustlinesResult {
   /** Resource asset codes the player can't receive yet; null until checked or when disconnected. */
   missing: string[] | null;
+  isLoading: boolean;
   isSettingUp: boolean;
   error: string | null;
   /** Asks the player to sign one transaction creating every missing trustline. */
@@ -22,6 +23,7 @@ export function useTrustlines(
   signTransaction: (xdr: string, networkPassphrase: string) => Promise<string>
 ): UseTrustlinesResult {
   const [missing, setMissing] = useState<string[] | null>(null);
+  const [isLoading, setIsLoading] = useState(Boolean(walletAddress));
   const [isSettingUp, setIsSettingUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isMounted = useRef(true);
@@ -29,8 +31,11 @@ export function useTrustlines(
   const checkTrustlines = useCallback(async () => {
     if (!walletAddress) {
       setMissing(null);
+      setIsLoading(false);
       return;
     }
+    setIsLoading(true);
+    setError(null);
     try {
       const resources = new ResourcesClient(getStarboundClient());
       const result = await resources.findMissingTrustlines(walletAddress, getResourceIssuer());
@@ -40,6 +45,10 @@ export function useTrustlines(
     } catch (err) {
       if (isMounted.current) {
         setError(err instanceof Error ? err.message : String(err));
+      }
+    } finally {
+      if (isMounted.current) {
+        setIsLoading(false);
       }
     }
   }, [walletAddress]);
@@ -72,5 +81,5 @@ export function useTrustlines(
     }
   }, [walletAddress, signTransaction, checkTrustlines]);
 
-  return { missing, isSettingUp, error, setUpTrustlines };
+  return { missing, isLoading, isSettingUp, error, setUpTrustlines };
 }

@@ -23,10 +23,21 @@ export function getSystemColor(system: GalaxySystem, walletAddress: string | nul
   return system.owner === walletAddress ? 'var(--accent)' : 'var(--red)';
 }
 
+/** Returns a complete accessible name for a galaxy cell. */
+export function getSystemAriaLabel(system: GalaxySystem, walletAddress: string | null): string {
+  const ownership = !system.owner
+    ? 'unclaimed'
+    : system.owner === walletAddress
+      ? 'owned by you'
+      : `owned by ${system.owner}`;
+
+  return `System ${system.systemId}, ${ownership}, resource ${system.resourceType}`;
+}
+
 export interface GalaxyMapProps {
   systems: GalaxySystem[];
   walletAddress: string | null;
-  onSelectSystem?: (systemId: number) => void;
+  onSelectSystem?: (systemId: number, trigger: SVGRectElement) => void;
 }
 
 /** Renders the galaxy grid as an SVG, one cell per star system. */
@@ -35,12 +46,16 @@ export function GalaxyMap({ systems, walletAddress, onSelectSystem }: GalaxyMapP
   const svgWidth = width * (CELL_SIZE + CELL_GAP);
   const svgHeight = height * (CELL_SIZE + CELL_GAP);
 
+  const selectSystem = (systemId: number, trigger: SVGRectElement) => {
+    onSelectSystem?.(systemId, trigger);
+  };
+
   const handleCellKeyDown = (event: KeyboardEvent<SVGRectElement>, systemId: number) => {
     if (event.key !== 'Enter' && event.key !== ' ') {
       return;
     }
     event.preventDefault();
-    onSelectSystem?.(systemId);
+    selectSystem(systemId, event.currentTarget);
   };
 
   return (
@@ -53,6 +68,7 @@ export function GalaxyMap({ systems, walletAddress, onSelectSystem }: GalaxyMapP
       {systems.map((system) => (
         <rect
           key={system.systemId}
+          id={`galaxy-cell-${system.systemId}`}
           data-testid={`galaxy-cell-${system.systemId}`}
           x={system.coordX * (CELL_SIZE + CELL_GAP)}
           y={system.coordY * (CELL_SIZE + CELL_GAP)}
@@ -62,10 +78,10 @@ export function GalaxyMap({ systems, walletAddress, onSelectSystem }: GalaxyMapP
           fill={getSystemColor(system, walletAddress)}
           stroke="var(--border)"
           style={{ cursor: onSelectSystem ? 'pointer' : 'default' }}
-          role={onSelectSystem ? 'button' : undefined}
+          role={onSelectSystem ? 'button' : 'img'}
           tabIndex={onSelectSystem ? 0 : undefined}
-          aria-label={onSelectSystem ? `System ${system.systemId}: ${system.resourceType}` : undefined}
-          onClick={() => onSelectSystem?.(system.systemId)}
+          aria-label={getSystemAriaLabel(system, walletAddress)}
+          onClick={(event) => selectSystem(system.systemId, event.currentTarget)}
           onKeyDown={(event) => handleCellKeyDown(event, system.systemId)}
         >
           <title>{`System ${system.systemId} — ${system.resourceType}`}</title>

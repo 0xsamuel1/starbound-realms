@@ -1,5 +1,6 @@
 import React from 'react';
 import { PlayerProfile as Profile } from '../hooks/usePlayerProfile';
+import { LoadingIndicator } from './LoadingIndicator';
 
 const styles: Record<string, React.CSSProperties> = {
   card: {
@@ -53,7 +54,7 @@ export interface PlayerProfileProps {
 /** Shows a player's systems-owned count and battle win/loss record. */
 export function PlayerProfile({ profile, isLoading, error }: PlayerProfileProps) {
   if (isLoading) {
-    return <p style={styles.textMuted}>Loading profile...</p>;
+    return <LoadingIndicator label="Loading profile…" />;
   }
   if (error) {
     return <p style={styles.textMuted}>{error}</p>;

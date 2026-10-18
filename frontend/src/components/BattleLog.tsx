@@ -1,6 +1,7 @@
 import React from 'react';
 import { PlayerBattle } from '../hooks/useBattleHistory';
 import { truncateAddress } from '../lib/format';
+import { LoadingIndicator } from './LoadingIndicator';
 
 const styles: Record<string, React.CSSProperties> = {
   list: {
@@ -53,7 +54,7 @@ export interface BattleLogProps {
  */
 export function BattleLog({ battles, isLoading, error, playerAddress }: BattleLogProps) {
   if (isLoading) {
-    return <p style={styles.textMuted}>Loading battle history...</p>;
+    return <LoadingIndicator label="Loading battle history…" />;
   }
   if (error) {
     return <p style={styles.textMuted}>{error}</p>;

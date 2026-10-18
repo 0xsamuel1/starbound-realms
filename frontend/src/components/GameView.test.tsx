@@ -65,6 +65,7 @@ const recentBattlesState = {
 
 const trustlinesState = {
   missing: [] as string[],
+  isLoading: false,
   isSettingUp: false,
   error: null as string | null,
   setUpTrustlines: vi.fn(),
@@ -95,9 +96,11 @@ vi.mock('../hooks/useBattleHistory', () => ({ useBattleHistory: vi.fn(() => hist
 // ── Child component mocks ─────────────────────────────────────────────────────
 
 vi.mock('./GalaxyMap', () => ({
-  GalaxyMap: ({ onSelectSystem }: { onSelectSystem: (id: number) => void }) => (
+  GalaxyMap: ({ onSelectSystem }: { onSelectSystem: (id: number, trigger: SVGRectElement) => void }) => (
     <div data-testid="galaxy-map">
-      <button onClick={() => onSelectSystem(42)}>Select System 42</button>
+      <button onClick={(event) => onSelectSystem(42, event.currentTarget as unknown as SVGRectElement)}>
+        Select System 42
+      </button>
     </div>
   ),
 }));
@@ -200,11 +203,14 @@ beforeEach(() => {
   galaxyState.isLoading = false;
   galaxyState.error = null;
   fleetState.fleet = null;
+  fleetState.isLoading = false;
   fleetState.error = null;
   balancesState.error = null;
+  balancesState.isLoading = false;
   recentBattlesState.error = null;
   trustlinesState.error = null;
   trustlinesState.missing = [];
+  trustlinesState.isLoading = false;
   profileState.profile = null;
   profileState.isLoading = false;
   profileState.error = null;
@@ -235,6 +241,24 @@ describe('GameView', () => {
 
     expect(screen.getByText(/loading galaxy/i)).toBeInTheDocument();
     expect(screen.queryByTestId('galaxy-map')).not.toBeInTheDocument();
+  });
+
+  it('shows the shared loading state while fleet data loads', () => {
+    fleetState.isLoading = true;
+
+    render(<GameView {...DEFAULT_PROPS} />);
+
+    expect(screen.getByRole('status', { name: /loading fleet/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('fleet')).not.toBeInTheDocument();
+  });
+
+  it('shows the shared loading state while trustlines are checked', () => {
+    trustlinesState.isLoading = true;
+
+    render(<GameView {...DEFAULT_PROPS} />);
+
+    expect(screen.getByRole('status', { name: /checking resource setup/i })).toBeInTheDocument();
+    expect(screen.queryByTestId('resource-setup-banner')).not.toBeInTheDocument();
   });
 
   it('shows a galaxy error and hides the map when the galaxy fetch fails', () => {
@@ -310,6 +334,17 @@ describe('GameView', () => {
 
     fireEvent.click(screen.getByText('Close'));
     expect(screen.queryByTestId('star-system')).not.toBeInTheDocument();
+  });
+
+  it('returns focus to the cell that opened the drawer when it closes', async () => {
+    galaxyState.systems = [makeSystem({ systemId: 42 })];
+
+    render(<GameView {...DEFAULT_PROPS} />);
+    const trigger = screen.getByText('Select System 42');
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByText('Close'));
+
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   // ── claimSystem ────────────────────────────────────────────────────────────

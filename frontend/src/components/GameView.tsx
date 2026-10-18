@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { GalaxyClient, FleetClient, BattleClient, UnitType } from '@starbound-realms/sdk';
 import { useGalaxyData } from '../hooks/useGalaxyData';
 import { useFleetData } from '../hooks/useFleetData';
@@ -15,6 +15,7 @@ import { BattleFeed } from './BattleFeed';
 import { PlayerProfile } from './PlayerProfile';
 import { BattleLog } from './BattleLog';
 import { ResourceSetupBanner } from './ResourceSetupBanner';
+import { LoadingIndicator } from './LoadingIndicator';
 import { getStarboundClient } from '../lib/starboundClient';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -68,8 +69,28 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
     useGalaxyData(backendUrl);
 
   const [selectedSystemId, setSelectedSystemId] = useState<number | null>(null);
+  const selectedSystemTriggerRef = useRef<{ element: SVGRectElement; systemId: number } | null>(null);
   const [claimError, setClaimError] = useState<string | null>(null);
   const selectedSystem = systems.find((s) => s.systemId === selectedSystemId) ?? null;
+
+  const selectSystem = useCallback((systemId: number, trigger: SVGRectElement) => {
+    selectedSystemTriggerRef.current = { element: trigger, systemId };
+    setSelectedSystemId(systemId);
+  }, []);
+
+  useEffect(() => {
+    const trigger = selectedSystemTriggerRef.current;
+    if (selectedSystemId === null && trigger) {
+      const focusTarget = trigger.element.isConnected
+        ? trigger.element
+        : document.getElementById(`galaxy-cell-${trigger.systemId}`);
+
+      if (focusTarget) {
+        focusTarget.focus();
+        selectedSystemTriggerRef.current = null;
+      }
+    }
+  }, [galaxyLoading, selectedSystemId]);
 
   const claimSystem = useCallback(
     async (systemId: number) => {
@@ -87,8 +108,10 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
     [walletAddress, signTransaction, refetchGalaxy]
   );
 
-  const { fleet, error: fleetError, refetch: refetchFleet } = useFleetData(walletAddress);
-  const { balances, error: balancesError, refetch: refetchBalances } = useResourceBalances(walletAddress);
+  const { fleet, isLoading: fleetLoading, error: fleetError, refetch: refetchFleet } =
+    useFleetData(walletAddress);
+  const { balances, isLoading: balancesLoading, error: balancesError, refetch: refetchBalances } =
+    useResourceBalances(walletAddress);
   const { profile, isLoading: profileLoading, error: profileError } = usePlayerProfile(backendUrl, walletAddress);
   const { battles: playerBattles, isLoading: historyLoading, error: historyError } =
     useBattleHistory(backendUrl, walletAddress);
@@ -97,6 +120,7 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
 
   const {
     missing: missingTrustlines,
+    isLoading: trustlinesLoading,
     isSettingUp: settingUpTrustlines,
     error: trustlineError,
     setUpTrustlines,
@@ -177,18 +201,22 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
     <>
       {/* Galaxy map section */}
       <section style={styles.galaxySection}>
-        <ResourceSetupBanner
-          missing={missingTrustlines}
-          isSettingUp={settingUpTrustlines}
-          onSetUp={setUpTrustlines}
-        />
+        {trustlinesLoading ? (
+          <LoadingIndicator label="Checking resource setup…" />
+        ) : (
+          <ResourceSetupBanner
+            missing={missingTrustlines}
+            isSettingUp={settingUpTrustlines}
+            onSetUp={setUpTrustlines}
+          />
+        )}
         {trustlineError && <p style={styles.walletError}>{trustlineError}</p>}
         <h2 style={styles.galaxyTitle}>The Galaxy</h2>
-        {galaxyLoading && <p style={styles.textMuted}>Loading galaxy...</p>}
+        {galaxyLoading && <LoadingIndicator label="Loading galaxy…" />}
         {galaxyError && <p style={styles.walletError}>{galaxyError}</p>}
         {!galaxyLoading && !galaxyError && (
           <>
-            <GalaxyMap systems={systems} walletAddress={walletAddress} onSelectSystem={setSelectedSystemId} />
+            <GalaxyMap systems={systems} walletAddress={walletAddress} onSelectSystem={selectSystem} />
             <StarSystem
               system={selectedSystem}
               walletAddress={walletAddress}
@@ -206,9 +234,17 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
             <div ref={playerSectionRef}>
               <h2 style={styles.galaxyTitle}>Your Profile</h2>
               <PlayerProfile profile={profile} isLoading={profileLoading} error={profileError} />
-              <ResourceBalances balances={balances} />
+              {balancesLoading ? (
+                <LoadingIndicator label="Loading resource balances…" />
+              ) : (
+                <ResourceBalances balances={balances} />
+              )}
               {balancesError && <p style={styles.walletError}>{balancesError}</p>}
-              <Fleet fleet={fleet} onBuildUnit={buildUnit} />
+              {fleetLoading ? (
+                <LoadingIndicator label="Loading fleet…" />
+              ) : (
+                <Fleet fleet={fleet} onBuildUnit={buildUnit} />
+              )}
             </div>
 
             <div>

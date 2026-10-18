@@ -1,4 +1,5 @@
 import { Fleet, isFleetEmpty } from '@starbound-realms/sdk';
+import { useEffect, useRef } from 'react';
 import { GalaxySystem } from '../hooks/useGalaxyData';
 import { truncateAddress } from '../lib/format';
 
@@ -93,6 +94,14 @@ export interface StarSystemProps {
 
 /** Detail drawer for a single star system, opened from GalaxyMap. */
 export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onMoveFleet, onAttack }: StarSystemProps) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (system) {
+      closeButtonRef.current?.focus();
+    }
+  }, [system?.systemId]);
+
   if (!system) {
     return null;
   }
@@ -106,10 +115,17 @@ export function StarSystem({ system, walletAddress, fleet, onClose, onClaim, onM
     Boolean(onAttack) && Boolean(fleet) && !isFleetEmpty(fleet!) && Boolean(system.owner) && system.owner !== walletAddress;
 
   return (
-    <div style={styles.drawer}>
+    <div style={styles.drawer} role="dialog" aria-labelledby={`star-system-title-${system.systemId}`}>
       <div style={styles.header}>
-        <span style={styles.title}>System {system.systemId}</span>
-        <button style={styles.closeButton} onClick={onClose} aria-label="Close">
+        <span id={`star-system-title-${system.systemId}`} style={styles.title}>
+          System {system.systemId}
+        </span>
+        <button
+          ref={closeButtonRef}
+          style={styles.closeButton}
+          onClick={onClose}
+          aria-label="Close system details"
+        >
           ✕
         </button>
       </div>
