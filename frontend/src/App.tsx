@@ -1,9 +1,22 @@
 import React from 'react';
 import { useStellar } from './hooks/useStellar';
-import { GameView } from './components/GameView';
+import { useGalaxyData } from './hooks/useGalaxyData';
+import { useFleetData } from './hooks/useFleetData';
+import { useResourceBalances } from './hooks/useResourceBalances';
+import { useRecentBattles } from './hooks/useRecentBattles';
+import { useTrustlines } from './hooks/useTrustlines';
+import { GalaxyMap } from './components/GalaxyMap';
+import { StarSystem } from './components/StarSystem';
+import { Fleet } from './components/Fleet';
+import { ResourceBalances } from './components/ResourceBalances';
+import { BattleFeed } from './components/BattleFeed';
+import { ResourceSetupBanner } from './components/ResourceSetupBanner';
+import { NetworkBadge } from './components/NetworkBadge';
 import { truncateAddress } from './lib/format';
+import { getConfiguredNetworkLabel, getStarboundClient } from './lib/starboundClient';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:3000';
+const NETWORK_LABEL = getConfiguredNetworkLabel();
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +50,7 @@ const styles: Record<string, React.CSSProperties> = {
 
   navLinks: {
     display: 'flex',
+    alignItems: 'center',
     gap: '2rem',
     listStyle: 'none',
   },
@@ -255,6 +269,9 @@ export default function App() {
       <nav style={styles.nav}>
         <span style={styles.navLogo}>✦ STARBOUND REALMS</span>
         <ul style={styles.navLinks}>
+          <li>
+            <NetworkBadge network={NETWORK_LABEL} />
+          </li>
           <li>
             <a
               href="https://github.com/OlaGreat/starbound-realms"
