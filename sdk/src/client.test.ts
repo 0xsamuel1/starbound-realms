@@ -1,9 +1,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import { nativeToScVal, rpc, xdr, StrKey } from '@stellar/stellar-sdk';
-import { StarboundClient } from './client.js';
+import { StarboundClient, MIN_STELLAR_SDK_VERSION, assertCompatibleStellarSdk } from './client.js';
 import { SimulationError, NetworkError } from './errors.js';
 
 const CONTRACT_ID = StrKey.encodeContract(Buffer.alloc(32, 3));
+
+describe('assertCompatibleStellarSdk', () => {
+  it('succeeds with the installed @stellar/stellar-sdk (>=17.2.1)', () => {
+    expect(MIN_STELLAR_SDK_VERSION).toBe('17.2.1');
+    expect(() => assertCompatibleStellarSdk()).not.toThrow();
+  });
+
+  it('throws a descriptive error referencing Bad union switch: 4 when xdr.TransactionMeta.v4 is missing (e.g. v13)', () => {
+    expect(() => assertCompatibleStellarSdk({ TransactionMeta: {} })).toThrow(/TransactionMeta\.v4/);
+    expect(() => assertCompatibleStellarSdk({ TransactionMeta: {} })).toThrow(/Bad union switch: 4/);
+  });
+});
 
 function makeClient(server: Partial<rpc.Server>): StarboundClient {
   const client = new StarboundClient({

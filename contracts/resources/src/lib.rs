@@ -58,7 +58,25 @@ pub struct ResourcesContract;
 
 #[contractimpl]
 impl ResourcesContract {
-    /// Initialize with addresses of the three Stellar Asset Contract (SAC) tokens.
+    /// Initializes the resources contract with the addresses of the three
+    /// Stellar Asset Contract (SAC) tokens backing `Iron`, `Energy`, and `Plasma`.
+    /// Must be called once before any other contract function is invoked.
+    ///
+    /// # Parameters
+    /// - `env`: The Soroban execution environment.
+    /// - `admin`: The administrator address stored for privileged operations (`mint`, `set_galaxy_map`).
+    /// - `iron_token`: The contract address of the `IRON` Stellar Asset Contract.
+    /// - `energy_token`: The contract address of the `NRGY` Stellar Asset Contract.
+    /// - `plasma_token`: The contract address of the `PLSM` Stellar Asset Contract.
+    ///
+    /// # Returns
+    /// `()` — writes the admin and token addresses to instance storage and marks the contract initialized.
+    ///
+    /// # Authorization
+    /// Requires authorization from `admin` (`admin.require_auth()`).
+    ///
+    /// # Panics
+    /// - Panics with `"already initialized"` if `initialize` has already been called on this contract.
     pub fn initialize(
         env: Env,
         admin: Address,
@@ -85,7 +103,27 @@ impl ResourcesContract {
         env.storage().instance().set(&DataKey::Initialized, &true);
     }
 
-    /// Mint resources to a player. Only callable by the admin.
+    /// Mints `amount` of `resource` directly to `to` via the underlying Stellar Asset Contract
+    /// and publishes a `("minted", to)` event with payload `(resource, amount)`.
+    ///
+    /// # Parameters
+    /// - `env`: The Soroban execution environment.
+    /// - `to`: The recipient player address (must hold a trustline to the underlying classic asset).
+    /// - `resource`: Which resource token to mint ([`ResourceType::Iron`], [`ResourceType::Energy`], or [`ResourceType::Plasma`]).
+    /// - `amount`: The quantity of tokens to mint (128-bit signed integer, must be non-negative).
+    ///
+    /// # Returns
+    /// `()` — mints the tokens in-place on the corresponding Stellar Asset Contract.
+    ///
+    /// # Authorization
+    /// Requires authorization from the contract `admin` (`admin.require_auth()`), AND requires the
+    /// admin (or this contract, if asset administration was transferred) to be authorized by the
+    /// underlying Stellar Asset Contract.
+    ///
+    /// # Panics
+    /// - Panics with `"not initialized"` if [`ResourcesContract::initialize`] has not been called.
+    /// - Panics in the underlying Stellar Asset Contract if `amount < 0`, if `to` lacks a trustline,
+    ///   or if the caller is not the asset administrator.
     pub fn mint(env: Env, to: Address, resource: ResourceType, amount: i128) {
         let admin: Address = env
             .storage()
@@ -103,17 +141,58 @@ impl ResourcesContract {
             .publish((symbol_short!("minted"), to), (resource, amount));
     }
 
-    /// Registers the galaxy-map contract `mine` reads ownership and yield from. Admin only.
+    /// Registers the `galaxy-map` contract address that [`ResourcesContract::mine`] queries to verify
+    /// system ownership, `last_claimed` timestamp, resource type, and yield.
+    ///
+    /// # Parameters
+    /// - `env`: The Soroban execution environment.
+    /// - `caller`: The address invoking this function (must match the stored `admin`).
+    /// - `galaxy_map`: The deployed contract address of the `galaxy-map` contract.
+    ///
+    /// # Returns
+    /// `()` — stores `galaxy_map` in instance storage under [`DataKey::GalaxyMap`].
+    ///
+    /// # Authorization
+    /// Requires authorization from `caller` (`caller.require_auth()`), who must be the contract `admin`.
+    ///
+    /// # Panics
+    /// - Panics with `"not initialized"` if [`ResourcesContract::initialize`] has not been called.
+    /// - Panics with `"caller is not the admin"` if `caller` does not match the stored `admin` address.
     pub fn set_galaxy_map(env: Env, caller: Address, galaxy_map: Address) {
         caller.require_auth();
         verify_caller_is_admin(&env, &caller);
         env.storage().instance().set(&DataKey::GalaxyMap, &galaxy_map);
     }
 
-    /// Pays the owner of `system_id` its yield for every full period since it
-    /// was last mined, or since they acquired it, whichever is later. Needs
-    /// only the player's signature, provided this contract administers the
-    /// asset contracts. Returns the amount minted.
+    /// Mines accrued resources for `system_id`, paying `player` the system's `resource_yield`
+    /// for every complete [`MINING_PERIOD_SECONDS`] (300s) elapsed since the system was last
+    /// mined or since `player` acquired it (`last_claimed`), whichever is later.
+    ///
+    /// Advances `LastMined(system_id)` by whole periods only so any partial period carries over,
+    /// and publishes a `("mined", player)` event with `(system_id, resource_type, amount)`.
+    ///
+    /// # Parameters
+    /// - `env`: The Soroban execution environment.
+    /// - `player`: The address of the system owner claiming mined resources.
+    /// - `system_id`: The ID of the star system to mine in the registered `galaxy-map` contract.
+    ///
+    /// # Returns
+    /// The total amount of resources minted (`i128`), equal to `full_periods * system.resource_yield`.
+    ///
+    /// # Authorization
+    /// Requires only `player.require_auth()` from the caller. Note: the three Stellar Asset Contracts
+    /// must have their admin set to this `resources` contract (`set_admin`) so it can mint on the
+    /// player's behalf without requiring the deployer's signature.
+    ///
+    /// # Panics
+    /// - Panics with `"galaxy map not set"` if [`ResourcesContract::set_galaxy_map`] has not been called.
+    /// - Panics with `"not initialized"` if [`ResourcesContract::initialize`] has not been called.
+    /// - Panics if `system_id` does not exist in the `galaxy-map` contract (`"system not found"`).
+    /// - Panics with `"player does not own this system"` if `system.owner` is not `Some(player)`.
+    /// - Panics with `"nothing to mine yet"` if fewer than [`MINING_PERIOD_SECONDS`] (300s) have
+    ///   elapsed since `max(last_mined, system.last_claimed)`.
+    /// - Panics in the underlying Stellar Asset Contract if this contract is not the asset admin
+    ///   or if `player` has not established a trustline for the system's resource asset.
     pub fn mine(env: Env, player: Address, system_id: u32) -> i128 {
         player.require_auth();
 
@@ -143,7 +222,28 @@ impl ResourcesContract {
         amount
     }
 
-    /// Burn resources from a player.
+    /// Burns `amount` of `resource` from `from`'s token balance via the underlying
+    /// Stellar Asset Contract and publishes a `("burned", from)` event with `(resource, amount)`.
+    ///
+    /// Used by the `fleet` contract when a player spends Iron and Energy to build units.
+    ///
+    /// # Parameters
+    /// - `env`: The Soroban execution environment.
+    /// - `from`: The player address whose tokens will be burned.
+    /// - `resource`: Which resource token to burn ([`ResourceType::Iron`], [`ResourceType::Energy`], or [`ResourceType::Plasma`]).
+    /// - `amount`: The quantity of tokens to burn (`i128`, must be non-negative and `<=` balance).
+    ///
+    /// # Returns
+    /// `()` — burns the tokens in-place on the corresponding Stellar Asset Contract.
+    ///
+    /// # Authorization
+    /// Requires authorization from `from` (`from.require_auth()`), including for the sub-invocation
+    /// to `TokenClient::burn` on the underlying Stellar Asset Contract.
+    ///
+    /// # Panics
+    /// - Panics with `"not initialized"` if [`ResourcesContract::initialize`] has not been called.
+    /// - Panics in the underlying Stellar Asset Contract if `from`'s balance is less than `amount`,
+    ///   if `amount < 0`, or if `from` lacks a trustline for `resource`.
     pub fn burn(env: Env, from: Address, resource: ResourceType, amount: i128) {
         from.require_auth();
 
@@ -155,7 +255,22 @@ impl ResourcesContract {
             .publish((symbol_short!("burned"), from), (resource, amount));
     }
 
-    /// Get a player's resource balance.
+    /// Queries and returns `player`'s current balance of `resource` from the underlying
+    /// Stellar Asset Contract.
+    ///
+    /// # Parameters
+    /// - `env`: The Soroban execution environment.
+    /// - `player`: The player address whose resource balance to query.
+    /// - `resource`: Which resource token to query ([`ResourceType::Iron`], [`ResourceType::Energy`], or [`ResourceType::Plasma`]).
+    ///
+    /// # Returns
+    /// The player's current balance as an `i128` (`0` if the player holds no tokens or trustline).
+    ///
+    /// # Authorization
+    /// None — this is a read-only view function.
+    ///
+    /// # Panics
+    /// - Panics with `"not initialized"` if [`ResourcesContract::initialize`] has not been called.
     pub fn balance(env: Env, player: Address, resource: ResourceType) -> i128 {
         let token_addr = Self::token_addr(&env, &resource);
         let client = token::TokenClient::new(&env, &token_addr);

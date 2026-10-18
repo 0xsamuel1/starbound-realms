@@ -23,6 +23,14 @@ cd sdk
 pnpm run build
 ```
 
+### `@stellar/stellar-sdk` version requirement (`>=17.2.1 <18.0.0`)
+
+This SDK is tested and pinned against **`@stellar/stellar-sdk` `17.2.1`** (peer range `^17.2.1`). Do **not** downgrade to `13.x` or earlier:
+
+- **Why `<17` breaks against live testnet:** Since Stellar Protocol 23, Soroban RPC returns `TransactionMeta` v4 on confirmed transactions. `@stellar/stellar-sdk` 13 does not know union switch `4` on `xdr.TransactionMeta`, so every write call (`establishTrustlines`, `claimSystem`, `buildUnit`, `moveFleet`, `resolveBattle`) lands on-chain and then throws `Bad union switch: 4` while parsing its own confirmation in `pollTransaction` (fixed in PR #15).
+- **Why major upgrades require care:** `@stellar/stellar-sdk` 17 represents decoded XDR union/struct values as plain data properties (e.g. `op.body.invokeHostFunctionOp...`) rather than the method accessors (`op.body().invokeHostFunctionOp()...`) used in v13.
+- **Runtime guard:** `StarboundClient` performs a lightweight check at construction time (`assertCompatibleStellarSdk`) to verify `xdr.TransactionMeta.v4` is present and fails fast with a descriptive error if an older SDK is resolved.
+
 ---
 
 ## Quick start
@@ -234,3 +242,17 @@ const client = new StarboundClient({
   contractIds: { galaxyMap: 'C...', resources: 'C...', fleet: 'C...', battle: 'C...' },
 });
 ```
+
+---
+
+## End-to-end testnet example (`sdk/examples/full-loop.ts`)
+
+To run the complete gameplay flow (`establishTrustlines` → `claimSystem` → `mine` → `buildUnit` → `resolveBattle` → `getBattle`) against the live Stellar testnet deployment in `.env.testnet` using a plain `Keypair` signer (no Freighter required):
+
+```bash
+pnpm --dir sdk build
+node sdk/examples/full-loop.ts
+```
+
+You can optionally pass `ATTACKER_SECRET` and `DEFENDER_SECRET` environment variables to reuse existing funded testnet accounts across runs.
+
