@@ -1,6 +1,7 @@
 import React from 'react';
 import { LeaderboardEntry } from '../hooks/useLeaderboard';
 import { truncateAddress } from '../lib/format';
+import { LoadingIndicator } from './LoadingIndicator';
 
 const styles: Record<string, React.CSSProperties> = {
   list: {
@@ -56,7 +57,7 @@ export interface LeaderboardProps {
 /** Renders the top-players leaderboard: rank, address, systems owned, and W/L record. */
 export function Leaderboard({ players, isLoading, error }: LeaderboardProps) {
   if (isLoading) {
-    return <p style={styles.textMuted}>Loading leaderboard...</p>;
+    return <LoadingIndicator label="Loading leaderboard…" />;
   }
   if (error) {
     return <p style={styles.textMuted}>{error}</p>;

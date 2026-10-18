@@ -1,5 +1,6 @@
 import { RecentBattle } from '../hooks/useRecentBattles';
 import { truncateAddress } from '../lib/format';
+import { LoadingIndicator } from './LoadingIndicator';
 
 const styles: Record<string, React.CSSProperties> = {
   list: {
@@ -53,7 +54,7 @@ export function BattleFeed({
   onNextPage,
 }: BattleFeedProps) {
   if (isLoading) {
-    return <p style={styles.textMuted}>Loading battles...</p>;
+    return <LoadingIndicator label="Loading battles…" />;
   }
   if (error) {
     return <p style={styles.textMuted}>{error}</p>;

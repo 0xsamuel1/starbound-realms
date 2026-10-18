@@ -26,6 +26,7 @@ describe('useTrustlines', () => {
     const { result } = renderHook(() => useTrustlines(null, signTransaction));
 
     expect(result.current.missing).toBeNull();
+    expect(result.current.isLoading).toBe(false);
     expect(findMissingTrustlines).not.toHaveBeenCalled();
   });
 
@@ -34,7 +35,10 @@ describe('useTrustlines', () => {
 
     const { result } = renderHook(() => useTrustlines('GPLAYER', signTransaction));
 
+    expect(result.current.isLoading).toBe(true);
+
     await waitFor(() => expect(result.current.missing).toEqual(['PLSM']));
+    expect(result.current.isLoading).toBe(false);
     expect(findMissingTrustlines).toHaveBeenCalledWith('GPLAYER', 'GISSUER');
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { getOwnershipLabel, StarSystem } from './StarSystem';
 import { GalaxySystem } from '../hooks/useGalaxyData';
 import { Fleet } from '@starbound-realms/sdk';
@@ -69,6 +69,13 @@ describe('StarSystem', () => {
     screen.getByRole('button', { name: /close/i }).click();
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('moves focus to its close button when opened', async () => {
+    render(<StarSystem system={makeSystem()} walletAddress="GME" onClose={() => {}} />);
+
+    const closeButton = screen.getByRole('button', { name: /close system details/i });
+    await waitFor(() => expect(closeButton).toHaveFocus());
   });
 
   it('shows a claim button for an unclaimed system and calls onClaim with the system id', () => {
