@@ -75,14 +75,38 @@ vi.mock('./hooks/useRecentBattles', () => ({
   })),
 }));
 
+// ── usePlayerProfile mock ─────────────────────────────────────────────────────
+
+vi.mock('./hooks/usePlayerProfile', () => ({
+  usePlayerProfile: vi.fn(() => ({
+    profile: { address: 'GPLAYER', systemsOwned: 3, battlesWon: 5, battlesLost: 2 },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
+vi.mock('./hooks/useBattleHistory', () => ({
+  useBattleHistory: vi.fn(() => ({
+    battles: [],
+    isLoading: false,
+    error: null,
+    refetch: vi.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 // ── useTrustlines mock — captured so we can inspect call arguments ─────────────
 
-const mockUseTrustlines = vi.fn(() => ({
-  missing: [],
-  isSettingUp: false,
-  error: null,
-  setUpTrustlines: vi.fn(),
-}));
+// vi.mock factories run before this file's body, so anything they close over
+// must be created via vi.hoisted to avoid a temporal-dead-zone reference error.
+const mockUseTrustlines = vi.hoisted(() =>
+  vi.fn((_walletAddress: string, _signTransaction: unknown) => ({
+    missing: [],
+    isSettingUp: false,
+    error: null,
+    setUpTrustlines: vi.fn(),
+  }))
+);
 
 vi.mock('./hooks/useTrustlines', () => ({
   useTrustlines: mockUseTrustlines,
@@ -105,6 +129,7 @@ vi.mock('@starbound-realms/sdk', () => ({
 vi.mock('./lib/starboundClient', () => ({
   getStarboundClient: vi.fn().mockReturnValue({ networkPassphrase: 'Test SDF Network ; September 2015' }),
   getResourceIssuer: vi.fn().mockReturnValue('GISSUER'),
+  getConfiguredNetworkLabel: vi.fn(() => 'Testnet'),
 }));
 
 // ── Minimal child component stubs ─────────────────────────────────────────────

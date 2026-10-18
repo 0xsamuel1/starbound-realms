@@ -5,11 +5,15 @@ import { useFleetData } from '../hooks/useFleetData';
 import { useResourceBalances } from '../hooks/useResourceBalances';
 import { useRecentBattles } from '../hooks/useRecentBattles';
 import { useTrustlines } from '../hooks/useTrustlines';
+import { usePlayerProfile } from '../hooks/usePlayerProfile';
+import { useBattleHistory } from '../hooks/useBattleHistory';
 import { GalaxyMap } from './GalaxyMap';
 import { StarSystem } from './StarSystem';
 import { Fleet } from './Fleet';
 import { ResourceBalances } from './ResourceBalances';
 import { BattleFeed } from './BattleFeed';
+import { PlayerProfile } from './PlayerProfile';
+import { BattleLog } from './BattleLog';
 import { ResourceSetupBanner } from './ResourceSetupBanner';
 import { getStarboundClient } from '../lib/starboundClient';
 
@@ -85,6 +89,9 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
 
   const { fleet, error: fleetError, refetch: refetchFleet } = useFleetData(walletAddress);
   const { balances, error: balancesError, refetch: refetchBalances } = useResourceBalances(walletAddress);
+  const { profile, isLoading: profileLoading, error: profileError } = usePlayerProfile(backendUrl, walletAddress);
+  const { battles: playerBattles, isLoading: historyLoading, error: historyError } =
+    useBattleHistory(backendUrl, walletAddress);
   const playerSectionRef = useRef<HTMLDivElement>(null);
   const recentBattles = useRecentBattles(backendUrl);
 
@@ -197,9 +204,21 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
             {battleResult && <p style={styles.textMuted}>{battleResult}</p>}
 
             <div ref={playerSectionRef}>
+              <h2 style={styles.galaxyTitle}>Your Profile</h2>
+              <PlayerProfile profile={profile} isLoading={profileLoading} error={profileError} />
               <ResourceBalances balances={balances} />
               {balancesError && <p style={styles.walletError}>{balancesError}</p>}
               <Fleet fleet={fleet} onBuildUnit={buildUnit} />
+            </div>
+
+            <div>
+              <h2 style={styles.galaxyTitle}>Battle History</h2>
+              <BattleLog
+                battles={playerBattles}
+                isLoading={historyLoading}
+                error={historyError}
+                playerAddress={walletAddress}
+              />
             </div>
             {fleetError && <p style={styles.walletError}>{fleetError}</p>}
             {buildError && <p style={styles.walletError}>{buildError}</p>}

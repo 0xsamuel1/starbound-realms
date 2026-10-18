@@ -63,16 +63,21 @@ vi.mock('pg', () => ({
 
 // index.ts calls app.listen() on import; stub it so no real port is opened.
 vi.mock('express', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('express')>();
+  // express is a CommonJS export= module, so typeof import('express') has no
+  // `default` property type-wise even though importOriginal() provides one at runtime.
+  const mod = (await importOriginal()) as typeof import('express') & {
+    default: typeof import('express');
+  };
+  const realExpress = mod.default;
   const wrapped = Object.assign(
     () => {
-      const app = mod.default();
+      const app = realExpress();
       app.listen = vi.fn(() => ({ close: vi.fn() })) as any;
       return app;
     },
-    { json: mod.default.json, Router: mod.default.Router, static: mod.default.static }
+    { json: realExpress.json, Router: realExpress.Router, static: realExpress.static }
   );
-  return { ...mod, default: wrapped, Router: mod.default.Router };
+  return { ...mod, default: wrapped, Router: realExpress.Router };
 });
 
 import { createGalaxyRouter } from './api/routes/galaxy';
@@ -108,6 +113,71 @@ describe('index.ts app wiring', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
     expect(typeof res.body.timestamp).toBe('string');
+  });
+
+  // ── CORS ────────────────────────────────────────────────────────────────────
+
+  it('allows the origin configured in CORS_ORIGIN', async () => {
+    vi.stubEnv('CORS_ORIGIN', 'http://localhost:5173');
+    const app = await loadApp();
+
+    const res = await request(app)
+      .get('/health')
+      .set('Origin', 'http://localhost:5173');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+  });
+
+  it('does not grant CORS to an origin that is not in CORS_ORIGIN', async () => {
+    vi.stubEnv('CORS_ORIGIN', 'http://localhost:5173');
+    const app = await loadApp();
+
+    const res = await request(app)
+      .get('/health')
+      .set('Origin', 'http://evil.example');
+
+    // The server still answers (CORS is a browser-enforced policy), but
+    // without the header the browser blocks the response — the origin is
+    // rejected for cross-origin reads.
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('supports a comma-separated list of origins', async () => {
+    vi.stubEnv('CORS_ORIGIN', 'http://localhost:5173, https://play.example.com');
+    const app = await loadApp();
+
+    const res = await request(app)
+      .get('/health')
+      .set('Origin', 'https://play.example.com');
+
+    expect(res.headers['access-control-allow-origin']).toBe('https://play.example.com');
+  });
+
+  it('sends no CORS header when CORS_ORIGIN is unset', async () => {
+    vi.stubEnv('CORS_ORIGIN', '');
+    const app = await loadApp();
+
+    const res = await request(app)
+      .get('/health')
+      .set('Origin', 'http://localhost:5173');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('answers CORS preflight requests for an allowed origin', async () => {
+    vi.stubEnv('CORS_ORIGIN', 'http://localhost:5173');
+    const app = await loadApp();
+
+    const res = await request(app)
+      .options('/leaderboard')
+      .set('Origin', 'http://localhost:5173')
+      .set('Access-Control-Request-Method', 'GET');
+
+    expect(res.status).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5173');
   });
 
   it('mounts the galaxy, player, battles and fleet routers at their prefixes', async () => {
