@@ -221,6 +221,20 @@ impl FleetContract {
     pub fn get_fleet(env: Env, player: Address) -> Fleet {
         get_stored_fleet(&env, &player)
     }
+
+    /// Clears one player's fleet and deployment state for a new season.
+    /// Admin only. There is no registry of players with fleets to loop over
+    /// (unlike galaxy-map's fixed grid), so this resets one player per call;
+    /// a season reset must call it once per player who has ever deployed.
+    pub fn reset_player_fleet(env: Env, caller: Address, player: Address) {
+        caller.require_auth();
+        verify_caller_is_admin(&env, &caller);
+
+        save_fleet(&env, &player, &empty_fleet());
+        env.storage()
+            .persistent()
+            .remove(&DataKey::Deployed(player));
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -232,7 +246,7 @@ pub fn calculate_fleet_attack(fleet: &Fleet) -> u32 {
 
 /// Returns the fleet's total defense power (sum of each unit's defense stat).
 pub fn calculate_fleet_defense(fleet: &Fleet) -> u32 {
-    fleet.scouts * 1 + fleet.fighters * 3 + fleet.cruisers * 8 + fleet.dreadnoughts * 20
+    fleet.scouts + fleet.fighters * 3 + fleet.cruisers * 8 + fleet.dreadnoughts * 20
 }
 
 fn verify_caller_is_admin(env: &Env, caller: &Address) {

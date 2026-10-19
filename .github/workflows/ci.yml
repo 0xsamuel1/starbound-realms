@@ -42,6 +42,29 @@ jobs:
       - name: Check formatting
         run: pnpm exec prettier --check .
 
+  # ── Lint (#95) ───────────────────────────────────────────────────────────────
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run lint
+        run: pnpm lint
+
   # ── Dependency audit (#100) ─────────────────────────────────────────────────
   audit:
     name: Dependency Audit
@@ -97,11 +120,15 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+          components: clippy
 
       - name: Cache Rust build (#99)
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: ". -> target"
+
+      - name: Clippy (#96)
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Install cargo-audit
         run: cargo install cargo-audit --locked
