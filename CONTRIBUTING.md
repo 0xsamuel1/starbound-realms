@@ -2,6 +2,8 @@
 
 Thanks for your interest in contributing. Starbound Realms is open to contributors of all skill levels — whether you write Rust, TypeScript, or just want to improve docs.
 
+Please note that this project is released with a [Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
+
 ---
 
 ## Where to Start
