@@ -1,7 +1,9 @@
 /**
- * PostgreSQL schema for Starbound Realms indexer.
- * Each table is defined as a CREATE TABLE IF NOT EXISTS statement.
- * Run via setup-testnet.sh or a migration tool.
+ * PostgreSQL schema reference for Starbound Realms indexer.
+ *
+ * The live schema is now managed by versioned migrations in `migrations/`
+ * (see #139). The SQL below is kept as a human-readable reference only —
+ * do NOT run it directly; use `npm run migrate:up` instead.
  */
 
 export const CREATE_STAR_SYSTEMS_TABLE = `

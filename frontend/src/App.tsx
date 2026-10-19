@@ -5,6 +5,7 @@ import { NetworkBadge } from './components/NetworkBadge';
 import { GameView } from './components/GameView';
 import { Leaderboard } from './components/Leaderboard';
 import { NotificationProvider, useNotification } from './components/Notifications';
+import { OnboardingModal } from './components/OnboardingModal';
 import { truncateAddress } from './lib/format';
 import { getConfiguredNetworkLabel } from './lib/starboundClient';
 
@@ -276,6 +277,9 @@ function AppContent() {
 
   return (
     <div style={styles.page}>
+      {/* First-time-visitor guide (#138) — shows once, tracked in localStorage */}
+      <OnboardingModal />
+
       {/* Nav */}
       <nav style={styles.nav}>
         <span style={styles.navLogo}>✦ STARBOUND REALMS</span>

@@ -8,6 +8,9 @@ vi.mock('../db/queries', () => ({
   saveResourceEvent: vi.fn(),
   upsertFleetSnapshot: vi.fn(),
   applyFleetLosses: vi.fn(),
+  createAlliance: vi.fn(),
+  addAllianceMember: vi.fn(),
+  removeAllianceMember: vi.fn(),
 }));
 
 import {
@@ -18,6 +21,9 @@ import {
   saveResourceEvent,
   upsertFleetSnapshot,
   applyFleetLosses,
+  createAlliance,
+  addAllianceMember,
+  removeAllianceMember,
 } from '../db/queries';
 import { processEvent, ContractEvent } from './processor';
 
@@ -31,6 +37,9 @@ beforeEach(() => {
   vi.mocked(saveResourceEvent).mockClear();
   vi.mocked(upsertFleetSnapshot).mockClear();
   vi.mocked(applyFleetLosses).mockClear();
+  vi.mocked(createAlliance).mockClear();
+  vi.mocked(addAllianceMember).mockClear();
+  vi.mocked(removeAllianceMember).mockClear();
 });
 
 describe('processEvent — claimed', () => {
@@ -224,5 +233,91 @@ describe('processEvent — losses', () => {
     await processEvent(db, event);
 
     expect(applyFleetLosses).toHaveBeenCalledWith(db, 'GPLAYER', 1, 2, 0, 1);
+  });
+});
+
+describe('processEvent — alliance_created', () => {
+  it('creates the alliance with its leader', async () => {
+    // topic: ["alliance_created", leader], value: [alliance_id, name]
+    const event: ContractEvent = {
+      contractId: 'C_ALLIANCE',
+      topic: ['alliance_created', 'GLEADER'],
+      value: [42, 'Star League'],
+      ledgerSequence: 1000,
+    };
+
+    await processEvent(db, event);
+
+    expect(createAlliance).toHaveBeenCalledWith(db, 42, 'Star League', 'GLEADER', 1000);
+    // createAlliance is responsible for seeding the leader as a member.
+    expect(addAllianceMember).not.toHaveBeenCalled();
+    expect(removeAllianceMember).not.toHaveBeenCalled();
+  });
+});
+
+describe('processEvent — alliance_joined', () => {
+  it('adds the player to the alliance as a member', async () => {
+    // topic: ["alliance_joined", player], value: alliance_id
+    const event: ContractEvent = {
+      contractId: 'C_ALLIANCE',
+      topic: ['alliance_joined', 'GPLAYER'],
+      value: 42,
+      ledgerSequence: 1100,
+    };
+
+    await processEvent(db, event);
+
+    expect(addAllianceMember).toHaveBeenCalledWith(db, 42, 'GPLAYER', 'member');
+    expect(createAlliance).not.toHaveBeenCalled();
+    expect(removeAllianceMember).not.toHaveBeenCalled();
+  });
+
+  it('accepts the alliance id wrapped in a tuple', async () => {
+    const event: ContractEvent = {
+      contractId: 'C_ALLIANCE',
+      topic: ['alliance_joined', 'GPLAYER'],
+      value: [7],
+      ledgerSequence: 1101,
+    };
+
+    await processEvent(db, event);
+
+    expect(addAllianceMember).toHaveBeenCalledWith(db, 7, 'GPLAYER', 'member');
+  });
+});
+
+describe('processEvent — alliance_left', () => {
+  it('removes the player from their alliance', async () => {
+    // topic: ["alliance_left", player], value: alliance_id
+    const event: ContractEvent = {
+      contractId: 'C_ALLIANCE',
+      topic: ['alliance_left', 'GPLAYER'],
+      value: 42,
+      ledgerSequence: 1200,
+    };
+
+    await processEvent(db, event);
+
+    expect(removeAllianceMember).toHaveBeenCalledWith(db, 'GPLAYER');
+    expect(createAlliance).not.toHaveBeenCalled();
+    expect(addAllianceMember).not.toHaveBeenCalled();
+  });
+});
+
+describe('processEvent — unknown topics', () => {
+  it('ignores events it does not recognise without touching the database', async () => {
+    const event: ContractEvent = {
+      contractId: 'C_X',
+      topic: ['something_new', 'GPLAYER'],
+      value: 1,
+      ledgerSequence: 2000,
+    };
+
+    await processEvent(db, event);
+
+    expect(createAlliance).not.toHaveBeenCalled();
+    expect(addAllianceMember).not.toHaveBeenCalled();
+    expect(removeAllianceMember).not.toHaveBeenCalled();
+    expect(upsertStarSystem).not.toHaveBeenCalled();
   });
 });
