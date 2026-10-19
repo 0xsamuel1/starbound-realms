@@ -2,9 +2,11 @@ import { Pool } from 'pg';
 
 // ── Star Systems ──────────────────────────────────────────────────────────────
 
-export async function fetchAllStarSystems(db: Pool) {
+export async function fetchAllStarSystems(db: Pool, limit?: number, offset = 0) {
+  const pagination = limit == null ? '' : ' LIMIT $1 OFFSET $2';
   const result = await db.query(
-    'SELECT * FROM star_systems ORDER BY system_id ASC'
+    `SELECT * FROM star_systems ORDER BY system_id ASC${pagination}`,
+    limit == null ? [] : [limit, offset]
   );
   return result.rows;
 }

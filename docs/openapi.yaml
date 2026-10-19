@@ -1,0 +1,103 @@
+openapi: 3.0.3
+info:
+  title: Starbound Realms API
+  version: 0.1.0
+  description: Read API for galaxy state, player profiles, battles, fleets, and leaderboard data.
+servers:
+  - url: http://localhost:3000
+paths:
+  /health:
+    get:
+      summary: Check API health
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, timestamp]
+                properties:
+                  status: { type: string, example: ok }
+                  timestamp: { type: string, format: date-time }
+  /galaxy:
+    get:
+      summary: List star systems
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 0, maximum: 500, default: 100 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: A page of systems
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [systems, pagination]
+                properties:
+                  systems: { type: array, items: { $ref: '#/components/schemas/StarSystem' } }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /galaxy/{systemId}:
+    get:
+      summary: Get one star system
+      parameters:
+        - { name: systemId, in: path, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: Star system
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [system]
+                properties: { system: { $ref: '#/components/schemas/StarSystem' } }
+        '404': { description: System not found }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /player/{address}:
+    get:
+      summary: Get a player profile
+      parameters: [{ name: address, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200': { description: Player profile }
+        '404': { description: Player not found }
+  /battles:
+    get:
+      summary: List recent battles
+      responses: { '200': { description: Recent battles } }
+  /leaderboard:
+    get:
+      summary: Get the player leaderboard
+      responses: { '200': { description: Ranked players } }
+components:
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Pagination:
+      type: object
+      required: [limit, offset, count, hasMore, nextOffset]
+      properties:
+        limit: { type: integer }
+        offset: { type: integer }
+        count: { type: integer }
+        hasMore: { type: boolean }
+        nextOffset: { type: integer, nullable: true }
+    StarSystem:
+      type: object
+      properties:
+        system_id: { type: integer }
+        owner: { type: string, nullable: true }
+        coord_x: { type: integer }
+        coord_y: { type: integer }
+        resource_type: { type: string, enum: [Iron, Energy, Plasma] }
+        resource_yield: { type: integer }
+        defense_rating: { type: integer }
+        last_claimed: { type: string }
+    Error:
+      type: object
+      required: [error]
+      properties: { error: { type: string } }

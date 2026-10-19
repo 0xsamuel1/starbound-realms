@@ -45,6 +45,7 @@ export interface UseGalaxyDataResult {
   systems: GalaxySystem[];
   isLoading: boolean;
   error: string | null;
+  pagination: { limit: number; offset: number; count: number; hasMore: boolean; nextOffset: number | null } | null;
   /** Re-fetches the galaxy grid — call after a write (e.g. claiming a system) to refresh the view. */
   refetch: () => Promise<void>;
 }
@@ -54,6 +55,7 @@ export function useGalaxyData(backendUrl: string): UseGalaxyDataResult {
   const [systems, setSystems] = useState<GalaxySystem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<UseGalaxyDataResult['pagination']>(null);
   const isMounted = useRef(true);
 
   const load = useCallback(async () => {
@@ -64,9 +66,13 @@ export function useGalaxyData(backendUrl: string): UseGalaxyDataResult {
       if (!response.ok) {
         throw new Error(`failed to fetch galaxy: ${response.status}`);
       }
-      const { systems: raw } = (await response.json()) as { systems: RawGalaxySystem[] };
+      const { systems: raw, pagination: page } = (await response.json()) as {
+        systems: RawGalaxySystem[];
+        pagination?: UseGalaxyDataResult['pagination'];
+      };
       if (isMounted.current) {
         setSystems(raw.map(toGalaxySystem));
+        setPagination(page ?? null);
       }
     } catch (err) {
       if (isMounted.current) {
@@ -87,5 +93,5 @@ export function useGalaxyData(backendUrl: string): UseGalaxyDataResult {
     };
   }, [load]);
 
-  return { systems, isLoading, error, refetch: load };
+  return { systems, isLoading, error, pagination, refetch: load };
 }

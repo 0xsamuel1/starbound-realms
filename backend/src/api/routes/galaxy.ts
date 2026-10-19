@@ -13,14 +13,35 @@ export function createGalaxyRouter(db: Pool): Router {
 
 /** Returns the full galaxy grid */
 function fetchGalaxyGrid(db: Pool) {
-  return async (_req: Request, res: Response, next: NextFunction) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const systems = await fetchAllStarSystems(db);
-      res.json({ systems });
+      const limit = parsePageParameter(req.query.limit, 100, 500);
+      const offset = parsePageParameter(req.query.offset, 0, Number.MAX_SAFE_INTEGER);
+      const systems = await fetchAllStarSystems(db, limit, offset);
+      res.json({
+        systems,
+        pagination: {
+          limit,
+          offset,
+          count: systems.length,
+          hasMore: systems.length === limit,
+          nextOffset: systems.length === limit ? offset + limit : null,
+        },
+      });
     } catch (err) {
       next(err);
     }
   };
+}
+
+/** Parses bounded pagination values and rejects malformed query parameters. */
+function parsePageParameter(raw: unknown, fallback: number, max: number): number {
+  if (raw == null || raw === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0 || value > max) {
+    throw Object.assign(new Error('Invalid pagination parameter'), { statusCode: 400 });
+  }
+  return value;
 }
 
 /** Returns a single star system by ID */

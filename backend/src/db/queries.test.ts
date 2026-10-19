@@ -65,6 +65,14 @@ describe('fetchAllStarSystems', () => {
     expect(sql).toContain('FROM star_systems');
     expect(sql).toContain('ORDER BY system_id ASC');
   });
+
+  it('adds LIMIT and OFFSET when a page is requested', async () => {
+    const db = fakeDb([{ system_id: 4 }]);
+    await expect(fetchAllStarSystems(db, 10, 20)).resolves.toEqual([{ system_id: 4 }]);
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('LIMIT $1 OFFSET $2');
+    expect(params).toEqual([10, 20]);
+  });
 });
 
 describe('fetchStarSystemById', () => {

@@ -35,7 +35,26 @@ describe('GET /galaxy', () => {
     const res = await request(buildApp()).get('/galaxy');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ systems });
+    expect(res.body).toEqual({
+      systems,
+      pagination: { limit: 100, offset: 0, count: 2, hasMore: false, nextOffset: null },
+    });
+    expect(vi.mocked(fetchAllStarSystems)).toHaveBeenCalledWith(db, 100, 0);
+  });
+
+  it('applies bounded limit and offset pagination', async () => {
+    vi.mocked(fetchAllStarSystems).mockResolvedValue([{ system_id: 21 }]);
+
+    const res = await request(buildApp()).get('/galaxy?limit=25&offset=50');
+
+    expect(res.status).toBe(200);
+    expect(vi.mocked(fetchAllStarSystems)).toHaveBeenCalledWith(db, 25, 50);
+    expect(res.body.pagination).toMatchObject({ limit: 25, offset: 50, count: 1, hasMore: false });
+  });
+
+  it('rejects invalid pagination parameters', async () => {
+    const res = await request(buildApp()).get('/galaxy?limit=-1');
+    expect(res.status).toBe(400);
   });
 });
 
