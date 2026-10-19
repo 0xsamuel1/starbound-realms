@@ -307,6 +307,11 @@ impl ResourcesContract {
 
     /// Clears every system's mining timer for a new season. Admin only.
     ///
+    /// Sets each timer to now rather than clearing it: `mining_start` falls
+    /// back to `last_claimed` when there is no stored timer, so clearing it
+    /// would let a system whose ownership survives the reset window re-mine
+    /// periods it already collected.
+    ///
     /// Actual token balances live on the Stellar Asset Contracts and are not
     /// cleared here: `burn` requires the holder's own authorization, and this
     /// contract has no registry of which players hold tokens to sweep.
@@ -316,9 +321,10 @@ impl ResourcesContract {
 
         let grid_size = fetch_galaxy_map_client(&env).get_grid_size();
         let total = grid_size * grid_size;
+        let now = env.ledger().timestamp();
         let mut id: u32 = 0;
         while id < total {
-            env.storage().persistent().remove(&DataKey::LastMined(id));
+            env.storage().persistent().set(&DataKey::LastMined(id), &now);
             id += 1;
         }
     }
