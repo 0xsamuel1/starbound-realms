@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useStellar } from './hooks/useStellar';
 import { useLeaderboard } from './hooks/useLeaderboard';
 import { NetworkBadge } from './components/NetworkBadge';
+import { ThemeToggle } from './components/ThemeToggle';
 import { GameView } from './components/GameView';
 import { Leaderboard } from './components/Leaderboard';
 import { NotificationProvider, useNotification } from './components/Notifications';
@@ -218,6 +219,16 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     fontFamily: 'inherit',
   },
+  copyBtn: {
+    padding: '0.45rem 0.8rem',
+    borderRadius: '6px',
+    border: '1px solid var(--border)',
+    background: 'var(--bg-card)',
+    color: 'var(--text-muted)',
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
 
   leaderboardSection: {
     maxWidth: '900px',
@@ -274,6 +285,7 @@ function AppContent() {
     useStellar();
   useNotification(walletError);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   return (
     <div style={styles.page}>
@@ -286,6 +298,7 @@ function AppContent() {
         <ul style={styles.navLinks}>
           <li>
             <NetworkBadge network={NETWORK_LABEL} />
+            <ThemeToggle />
           </li>
           <li>
             <button
@@ -338,13 +351,28 @@ function AppContent() {
 
         <div style={styles.ctaGroup}>
           {walletConnected && walletAddress ? (
-            <button
-              type="button"
-              style={styles.walletConnected}
-              aria-label={`Connected wallet: ${walletAddress}`}
-            >
-              ✓ Connected — {truncateAddress(walletAddress)}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button
+                type="button"
+                style={styles.walletConnected}
+                aria-label={`Connected wallet: ${walletAddress}`}
+              >
+                ✓ Connected — {truncateAddress(walletAddress)}
+              </button>
+              {/* #125: Copy-to-clipboard button for wallet address */}
+              <button
+                type="button"
+                style={styles.copyBtn}
+                onClick={() => {
+                  navigator.clipboard.writeText(walletAddress);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                aria-label="Copy wallet address to clipboard"
+              >
+                {copied ? 'Copied!' : '📋 Copy'}
+              </button>
+            </div>
           ) : (
             <button style={styles.btnPrimary} onClick={connectWallet}>
               Connect Freighter
