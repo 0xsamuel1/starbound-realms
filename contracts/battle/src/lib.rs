@@ -336,7 +336,7 @@ fn calculate_fleet_attack(fleet: &Fleet) -> u32 {
 
 /// Returns the fleet's total defense power (sum of each unit's defense stat).
 fn calculate_fleet_defense(fleet: &Fleet) -> u32 {
-    fleet.scouts * 1 + fleet.fighters * 3 + fleet.cruisers * 8 + fleet.dreadnoughts * 20
+    fleet.scouts + fleet.fighters * 3 + fleet.cruisers * 8 + fleet.dreadnoughts * 20
 }
 
 #[cfg(test)]

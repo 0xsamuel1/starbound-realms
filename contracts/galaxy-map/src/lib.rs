@@ -257,6 +257,36 @@ impl GalaxyMapContract {
             .get(&DataKey::GridSize)
             .expect("not initialized")
     }
+
+    /// Clears `owner` and `last_claimed` on every system in the grid, for a
+    /// new season. Admin only. Loops the same way as `initialize`, so it is
+    /// bounded by the same `MAX_GRID_SIZE` resource-cost ceiling.
+    pub fn reset_season(env: Env, caller: Address) {
+        caller.require_auth();
+        verify_caller_is_admin(&env, &caller);
+
+        let grid_size: u32 = env
+            .storage()
+            .instance()
+            .get(&DataKey::GridSize)
+            .expect("not initialized");
+        let total = grid_size * grid_size;
+        let mut id: u32 = 0;
+
+        while id < total {
+            let mut system: StarSystem = env
+                .storage()
+                .persistent()
+                .get(&DataKey::System(id))
+                .expect("system not found");
+            system.owner = None;
+            system.last_claimed = 0;
+            env.storage()
+                .persistent()
+                .set(&DataKey::System(id), &system);
+            id += 1;
+        }
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

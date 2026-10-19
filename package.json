@@ -10,6 +10,12 @@
   "scripts": {
     "dev:frontend": "pnpm --filter frontend dev",
     "dev:backend": "pnpm --filter backend dev",
-    "build": "pnpm --filter sdk build && pnpm --filter frontend build && pnpm --filter backend build"
+    "build": "pnpm --filter sdk build && pnpm --filter frontend build && pnpm --filter backend build",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "eslint": "^9.17.0",
+    "typescript-eslint": "^8.18.0",
+    "eslint-plugin-react-hooks": "^5.1.0"
   }
 }
