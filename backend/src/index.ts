@@ -10,6 +10,31 @@ import { standardLimiter, strictLimiter } from './api/middleware/rateLimit';
 import { errorHandler } from './api/middleware/errorHandler';
 import { startIndexer } from './indexer/indexer';
 
+// ── Environment Validation ────────────────────────────────────────────────────
+
+function validateEnv(): void {
+  const required = ['DATABASE_URL'];
+  const missing = required.filter((key) => !process.env[key]);
+
+  if (missing.length > 0) {
+    console.error('❌ Missing required environment variables:');
+    for (const key of missing) {
+      console.error(`   - ${key}`);
+    }
+    console.error('\nPlease set these in backend/.env (copy from .env.example)');
+    process.exit(1);
+  }
+
+  // Validate DATABASE_URL format
+  const dbUrl = process.env.DATABASE_URL!;
+  if (!dbUrl.startsWith('postgres://') && !dbUrl.startsWith('postgresql://')) {
+    console.error('❌ DATABASE_URL must start with postgres:// or postgresql://');
+    process.exit(1);
+  }
+}
+
+validateEnv();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
