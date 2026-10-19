@@ -5,9 +5,10 @@ import request from 'supertest';
 vi.mock('../../db/queries', () => ({
   fetchPlayerByAddress: vi.fn(),
   fetchBattlesByPlayer: vi.fn(),
+  fetchAllianceByPlayer: vi.fn(),
 }));
 
-import { fetchPlayerByAddress, fetchBattlesByPlayer } from '../../db/queries';
+import { fetchPlayerByAddress, fetchBattlesByPlayer, fetchAllianceByPlayer } from '../../db/queries';
 import { createPlayerRouter } from './player';
 
 const db = {} as any;
@@ -29,6 +30,7 @@ function buildApp() {
 beforeEach(() => {
   vi.mocked(fetchPlayerByAddress).mockClear();
   vi.mocked(fetchBattlesByPlayer).mockClear();
+  vi.mocked(fetchAllianceByPlayer).mockClear();
 });
 
 // ── GET /player/:address ──────────────────────────────────────────────────────
@@ -99,5 +101,45 @@ describe('GET /player/:address/battles', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ battles });
     expect(fetchBattlesByPlayer).toHaveBeenCalledWith(db, VALID_ADDRESS);
+  });
+});
+
+// ── GET /player/:address/alliance (#82) ───────────────────────────────────────
+
+describe('GET /player/:address/alliance', () => {
+  it('returns 400 for a malformed address without querying the database', async () => {
+    const res = await request(buildApp()).get('/player/not-a-valid-address/alliance');
+
+    expect(res.status).toBe(400);
+    expect(fetchAllianceByPlayer).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the player is not in an alliance', async () => {
+    vi.mocked(fetchAllianceByPlayer).mockResolvedValue(null);
+
+    const res = await request(buildApp()).get(`/player/${VALID_ADDRESS}/alliance`);
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Player is not in an alliance' });
+  });
+
+  it("returns the player's alliance with its member list", async () => {
+    const alliance = {
+      alliance_id: 42,
+      name: 'Star League',
+      leader: VALID_ADDRESS,
+      member_count: 2,
+      members: [
+        { player: VALID_ADDRESS, role: 'leader', joined_at: '2026-01-01T00:00:00Z' },
+        { player: UNKNOWN_ADDRESS, role: 'member', joined_at: '2026-01-02T00:00:00Z' },
+      ],
+    };
+    vi.mocked(fetchAllianceByPlayer).mockResolvedValue(alliance);
+
+    const res = await request(buildApp()).get(`/player/${VALID_ADDRESS}/alliance`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ alliance });
+    expect(fetchAllianceByPlayer).toHaveBeenCalledWith(db, VALID_ADDRESS);
   });
 });

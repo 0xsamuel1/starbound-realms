@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import {
   fetchPlayerByAddress,
   fetchBattlesByPlayer,
+  fetchAllianceByPlayer,
 } from '../../db/queries';
 
 export function createPlayerRouter(db: Pool): Router {
@@ -10,6 +11,7 @@ export function createPlayerRouter(db: Pool): Router {
 
   router.get('/:address', fetchPlayerProfile(db));
   router.get('/:address/battles', fetchPlayerBattleHistory(db));
+  router.get('/:address/alliance', fetchPlayerAlliance(db));
 
   return router;
 }
@@ -40,6 +42,25 @@ function fetchPlayerBattleHistory(db: Pool) {
       const address = validateStellarAddress(req.params.address);
       const battles = await fetchBattlesByPlayer(db, address);
       res.json({ battles });
+    } catch (err) {
+      next(err);
+    }
+  };
+}
+
+/** Returns the alliance a player currently belongs to (#82) */
+function fetchPlayerAlliance(db: Pool) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const address = validateStellarAddress(req.params.address);
+      const alliance = await fetchAllianceByPlayer(db, address);
+
+      if (!alliance) {
+        res.status(404).json({ error: 'Player is not in an alliance' });
+        return;
+      }
+
+      res.json({ alliance });
     } catch (err) {
       next(err);
     }

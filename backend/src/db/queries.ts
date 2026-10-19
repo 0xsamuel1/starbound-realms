@@ -209,3 +209,109 @@ export async function saveBattle(
     [battleId, attacker, defender, systemId, winner, rounds, ledgerSequence]
   );
 }
+
+// ── Alliances (#82) ───────────────────────────────────────────────────────────
+
+export async function createAlliance(
+  db: Pool,
+  allianceId: number,
+  name: string,
+  leader: string,
+  ledgerSequence: number
+) {
+  await db.query(
+    `INSERT INTO alliances (alliance_id, name, leader, member_count, ledger_sequence)
+     VALUES ($1, $2, $3, 1, $4)
+     ON CONFLICT (alliance_id) DO NOTHING`,
+    [allianceId, name, leader, ledgerSequence]
+  );
+  await addAllianceMember(db, allianceId, leader, 'leader');
+}
+
+export async function addAllianceMember(
+  db: Pool,
+  allianceId: number,
+  player: string,
+  role: 'leader' | 'member' = 'member'
+) {
+  await db.query(
+    `INSERT INTO alliance_members (alliance_id, player, role)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (player) DO UPDATE
+       SET alliance_id = EXCLUDED.alliance_id,
+           role = EXCLUDED.role,
+           joined_at = NOW()`,
+    [allianceId, player, role]
+  );
+  await db.query(
+    `UPDATE alliances
+     SET member_count = (
+       SELECT COUNT(*) FROM alliance_members WHERE alliance_id = $1
+     ), updated_at = NOW()
+     WHERE alliance_id = $1`,
+    [allianceId]
+  );
+}
+
+export async function removeAllianceMember(db: Pool, player: string) {
+  const existing = await db.query(
+    `SELECT alliance_id FROM alliance_members WHERE player = $1`,
+    [player]
+  );
+  const allianceId = existing.rows[0]?.alliance_id;
+  if (allianceId === undefined) return;
+
+  await db.query(`DELETE FROM alliance_members WHERE player = $1`, [player]);
+  await db.query(
+    `UPDATE alliances
+     SET member_count = (
+       SELECT COUNT(*) FROM alliance_members WHERE alliance_id = $1
+     ), updated_at = NOW()
+     WHERE alliance_id = $1`,
+    [allianceId]
+  );
+}
+
+/** The alliance a player currently belongs to, with its member list, or null. */
+export async function fetchAllianceByPlayer(db: Pool, address: string) {
+  const membership = await db.query(
+    `SELECT alliance_id FROM alliance_members WHERE player = $1`,
+    [address]
+  );
+  const allianceId = membership.rows[0]?.alliance_id;
+  if (allianceId === undefined) return null;
+
+  const alliance = await db.query(
+    `SELECT * FROM alliances WHERE alliance_id = $1`,
+    [allianceId]
+  );
+  if (!alliance.rows[0]) return null;
+
+  const members = await db.query(
+    `SELECT player, role, joined_at
+     FROM alliance_members
+     WHERE alliance_id = $1
+     ORDER BY role = 'leader' DESC, joined_at ASC`,
+    [allianceId]
+  );
+
+  return { ...alliance.rows[0], members: members.rows };
+}
+
+export async function fetchAllianceById(db: Pool, allianceId: number) {
+  const alliance = await db.query(
+    `SELECT * FROM alliances WHERE alliance_id = $1`,
+    [allianceId]
+  );
+  if (!alliance.rows[0]) return null;
+
+  const members = await db.query(
+    `SELECT player, role, joined_at
+     FROM alliance_members
+     WHERE alliance_id = $1
+     ORDER BY role = 'leader' DESC, joined_at ASC`,
+    [allianceId]
+  );
+
+  return { ...alliance.rows[0], members: members.rows };
+}

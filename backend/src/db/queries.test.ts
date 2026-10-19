@@ -13,6 +13,10 @@ import {
   saveBattle,
   fetchIndexerCursor,
   saveIndexerCursor,
+  createAlliance,
+  addAllianceMember,
+  removeAllianceMember,
+  fetchAllianceByPlayer,
 } from './queries';
 
 function fakeDb(rows: any[] = []) {
@@ -249,5 +253,103 @@ describe('saveBattle', () => {
     expect(sql).toContain('INSERT INTO battles');
     expect(sql).toContain('ON CONFLICT (battle_id) DO NOTHING');
     expect(params).toEqual([42, 'ATK', 'DEF', 3, 'ATK', 5, 100]);
+  });
+});
+
+// ── Alliances (#82) ───────────────────────────────────────────────────────────
+
+describe('createAlliance', () => {
+  it('inserts the alliance and seeds the leader as a member', async () => {
+    const db = fakeDb();
+
+    await createAlliance(db, 42, 'Star League', 'GLEADER', 100);
+
+    expect(db.query).toHaveBeenCalledTimes(3);
+    const [insertSql, insertParams] = db.query.mock.calls[0];
+    expect(insertSql).toContain('INSERT INTO alliances');
+    expect(insertSql).toContain('ON CONFLICT (alliance_id) DO NOTHING');
+    expect(insertParams).toEqual([42, 'Star League', 'GLEADER', 100]);
+
+    const [memberSql, memberParams] = db.query.mock.calls[1];
+    expect(memberSql).toContain('INSERT INTO alliance_members');
+    expect(memberParams).toEqual([42, 'GLEADER', 'leader']);
+  });
+});
+
+describe('addAllianceMember', () => {
+  it('upserts membership and refreshes the member count', async () => {
+    const db = fakeDb();
+
+    await addAllianceMember(db, 42, 'GMEMBER', 'member');
+
+    expect(db.query).toHaveBeenCalledTimes(2);
+    const [memberSql, memberParams] = db.query.mock.calls[0];
+    expect(memberSql).toContain('INSERT INTO alliance_members');
+    expect(memberSql).toContain('ON CONFLICT (player) DO UPDATE');
+    expect(memberParams).toEqual([42, 'GMEMBER', 'member']);
+
+    const [countSql, countParams] = db.query.mock.calls[1];
+    expect(countSql).toContain('member_count');
+    expect(countParams).toEqual([42]);
+  });
+});
+
+describe('removeAllianceMember', () => {
+  it('deletes the membership and refreshes the member count', async () => {
+    const db = fakeDb([{ alliance_id: 42 }]);
+
+    await removeAllianceMember(db, 'GMEMBER');
+
+    expect(db.query).toHaveBeenCalledTimes(3);
+    expect(db.query.mock.calls[1][0]).toContain('DELETE FROM alliance_members');
+    expect(db.query.mock.calls[1][1]).toEqual(['GMEMBER']);
+    expect(db.query.mock.calls[2][0]).toContain('member_count');
+  });
+
+  it('is a no-op when the player is not in an alliance', async () => {
+    const db = fakeDb([]);
+
+    await removeAllianceMember(db, 'GUNKNOWN');
+
+    expect(db.query).toHaveBeenCalledTimes(1);
+    expect(db.query.mock.calls[0][0]).toContain('SELECT alliance_id FROM alliance_members');
+  });
+});
+
+describe('fetchAllianceByPlayer', () => {
+  it('returns null when the player has no membership', async () => {
+    const db = fakeDb([]);
+
+    await expect(fetchAllianceByPlayer(db, 'GNONE')).resolves.toBeNull();
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns the alliance with its members', async () => {
+    const db = fakeDb();
+    db.query
+      .mockResolvedValueOnce({ rows: [{ alliance_id: 42 }] })
+      .mockResolvedValueOnce({
+        rows: [{ alliance_id: 42, name: 'Star League', leader: 'GLEADER', member_count: 2 }],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { player: 'GLEADER', role: 'leader', joined_at: '2026-01-01T00:00:00Z' },
+          { player: 'GMEMBER', role: 'member', joined_at: '2026-01-02T00:00:00Z' },
+        ],
+      });
+
+    const result = await fetchAllianceByPlayer(db, 'GMEMBER');
+
+    expect(result).toEqual({
+      alliance_id: 42,
+      name: 'Star League',
+      leader: 'GLEADER',
+      member_count: 2,
+      members: [
+        { player: 'GLEADER', role: 'leader', joined_at: '2026-01-01T00:00:00Z' },
+        { player: 'GMEMBER', role: 'member', joined_at: '2026-01-02T00:00:00Z' },
+      ],
+    });
+    expect(db.query).toHaveBeenCalledTimes(3);
   });
 });

@@ -15,6 +15,7 @@ import { BattleFeed } from './BattleFeed';
 import { PlayerProfile } from './PlayerProfile';
 import { BattleLog } from './BattleLog';
 import { ResourceSetupBanner } from './ResourceSetupBanner';
+import { GalaxyEmptyState } from './GalaxyEmptyState';
 import { LoadingIndicator } from './LoadingIndicator';
 import { useNotification } from './Notifications';
 import { getStarboundClient } from '../lib/starboundClient';
@@ -218,6 +219,10 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
         {galaxyLoading && <LoadingIndicator label="Loading galaxy…" />}
         {!galaxyLoading && !galaxyError && (
           <>
+            <GalaxyEmptyState
+              ownedCount={systems.filter((s) => s.owner === walletAddress).length}
+              claimedCount={systems.filter((s) => s.owner).length}
+            />
             <GalaxyMap systems={systems} walletAddress={walletAddress} onSelectSystem={selectSystem} />
             <StarSystem
               system={selectedSystem}

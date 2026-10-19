@@ -26,6 +26,12 @@ vi.mock('./components/GameView', () => ({
   ),
 }));
 
+// ── OnboardingModal mock — covered by OnboardingModal.test.tsx ────────────────
+
+vi.mock('./components/OnboardingModal', () => ({
+  OnboardingModal: () => null,
+}));
+
 // ── useLeaderboard mock — leaderboard tab tests don't need a real fetch ─────────
 
 vi.mock('./hooks/useLeaderboard', () => ({

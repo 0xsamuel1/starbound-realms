@@ -7,6 +7,9 @@ import {
   saveResourceEvent,
   upsertFleetSnapshot,
   applyFleetLosses,
+  createAlliance,
+  addAllianceMember,
+  removeAllianceMember,
 } from '../db/queries';
 
 export interface ContractEvent {
@@ -44,6 +47,15 @@ export async function processEvent(db: Pool, event: ContractEvent): Promise<void
       break;
     case 'losses':
       await processFleetLosses(db, event);
+      break;
+    case 'alliance_created':
+      await processAllianceCreated(db, event);
+      break;
+    case 'alliance_joined':
+      await processAllianceJoined(db, event);
+      break;
+    case 'alliance_left':
+      await processAllianceLeft(db, event);
       break;
     default:
       // Unknown event — skip silently
@@ -134,4 +146,36 @@ async function processFleetLosses(db: Pool, event: ContractEvent): Promise<void>
     Number(cruisers),
     Number(dreadnoughts)
   );
+}
+
+/**
+ * Handles alliance_created — topic: ["alliance_created", leader],
+ * value: [alliance_id, name]
+ */
+async function processAllianceCreated(db: Pool, event: ContractEvent): Promise<void> {
+  const leader = event.topic[1];
+  const [allianceId, name] = event.value;
+
+  await createAlliance(db, Number(allianceId), String(name), leader, event.ledgerSequence);
+}
+
+/**
+ * Handles alliance_joined — topic: ["alliance_joined", player],
+ * value: alliance_id
+ */
+async function processAllianceJoined(db: Pool, event: ContractEvent): Promise<void> {
+  const player = event.topic[1];
+  const allianceId = Array.isArray(event.value) ? event.value[0] : event.value;
+
+  await addAllianceMember(db, Number(allianceId), player, 'member');
+}
+
+/**
+ * Handles alliance_left — topic: ["alliance_left", player], value: alliance_id
+ * Removes the player from their alliance and refreshes the member count.
+ */
+async function processAllianceLeft(db: Pool, event: ContractEvent): Promise<void> {
+  const player = event.topic[1];
+
+  await removeAllianceMember(db, player);
 }
