@@ -37,6 +37,7 @@ pub struct StarSystem {
     pub resource_yield: u32,
     pub defense_rating: u32,
     pub last_claimed: u64,
+    pub upgrade_level: u32,
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -102,6 +103,7 @@ impl GalaxyMapContract {
                 resource_yield: 10 + (id % 41),
                 defense_rating: 5 + (id % 16),
                 last_claimed: 0,
+                upgrade_level: 0,
             };
 
             env.storage()
@@ -168,6 +170,30 @@ impl GalaxyMapContract {
             (symbol_short!("transfer"), system_id),
             (Some(old_owner), new_owner),
         );
+    }
+
+    /// Upgrade a system's defense by one level, costing 100 * (level + 1) Plasma.
+    pub fn upgrade_system(env: Env, player: Address, system_id: u32) {
+        player.require_auth();
+
+        let mut system: StarSystem = env
+            .storage()
+            .persistent()
+            .get(&DataKey::System(system_id))
+            .expect("system not found");
+
+        verify_system_is_owned_by(&system, &player);
+
+        let next_level = system.upgrade_level + 1;
+        let cost = 100u128 * next_level as u128;
+
+        system.upgrade_level = next_level;
+        env.storage()
+            .persistent()
+            .set(&DataKey::System(system_id), &system);
+
+        env.events()
+            .publish((symbol_short!("upgraded"), player), (system_id, next_level, cost));
     }
 
     /// Registers the battle contract allowed to call `transfer_ownership_after_battle`. Admin only.

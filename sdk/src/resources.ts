@@ -122,4 +122,27 @@ export class ResourcesClient {
       sign,
     });
   }
+
+  /**
+   * Upgrades a system's defense level, costing 100 * (current_level + 1) Plasma.
+   *
+   * @param playerAddress - The Stellar address of the system owner.
+   * @param systemId - The numeric ID of the system to upgrade.
+   * @param sign - A {@link TransactionSigner} that provides the player's signature.
+   * @returns A promise that resolves when the upgrade transaction is confirmed on-chain.
+   * @throws If the player doesn't own the system, lacks sufficient Plasma, or the
+   *   transaction fails.
+   */
+  async upgradeSystem(playerAddress: string, systemId: number, sign: TransactionSigner): Promise<void> {
+    return this.client.submitContractCall({
+      sourceAddress: playerAddress,
+      contractId: this.client.contractIds.resources,
+      method: 'upgrade_system',
+      args: [
+        nativeToScVal(playerAddress, { type: 'address' }),
+        nativeToScVal(systemId, { type: 'u32' }),
+      ],
+      sign,
+    });
+  }
 }

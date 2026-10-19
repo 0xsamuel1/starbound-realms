@@ -60,6 +60,7 @@ pub struct StarSystem {
     pub resource_yield: u32,
     pub defense_rating: u32,
     pub last_claimed: u64,
+    pub upgrade_level: u32,
 }
 
 /// The slice of the galaxy-map contract this contract depends on.
@@ -123,10 +124,11 @@ impl BattleContract {
         verify_fleet_is_not_empty(&attacker_initial);
         let defender_initial = fleet_contract.get_fleet(&defender);
 
+        let system_defense = system.defense_rating + system.upgrade_level * 5;
         let (attacker_final, defender_final, rounds) =
-            run_combat_rounds(&env, attacker_initial.clone(), defender_initial.clone(), system.defense_rating);
+            run_combat_rounds(&env, attacker_initial.clone(), defender_initial.clone(), system_defense);
 
-        let attacker_wins = did_attacker_win(&attacker_final, &defender_final, system.defense_rating);
+        let attacker_wins = did_attacker_win(&attacker_final, &defender_final, system_defense);
         let winner = if attacker_wins { attacker.clone() } else { defender.clone() };
 
         apply_losses_if_any(&env, &fleet_contract, &attacker, &attacker_initial, &attacker_final);

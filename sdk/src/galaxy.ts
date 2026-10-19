@@ -10,6 +10,7 @@ export interface StarSystem {
   resourceYield: number;
   defenseRating: number;
   lastClaimed: number;
+  upgradeLevel: number;
 }
 
 /** The raw shape scValToNative produces for the contract's StarSystem struct. */
@@ -21,6 +22,7 @@ interface RawStarSystem {
   resource_yield: number;
   defense_rating: number;
   last_claimed: bigint; // u64 decodes to bigint
+  upgrade_level: number;
 }
 
 /**
@@ -40,6 +42,7 @@ function toStarSystem(systemId: number, raw: RawStarSystem): StarSystem {
     resourceYield: raw.resource_yield,
     defenseRating: raw.defense_rating,
     lastClaimed: Number(raw.last_claimed),
+    upgradeLevel: raw.upgrade_level,
   };
 }
 
