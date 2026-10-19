@@ -66,6 +66,7 @@ pub struct StarSystem {
     pub resource_yield: u32,
     pub defense_rating: u32,
     pub last_claimed: u64,
+    pub upgrade_level: u32,
 }
 
 /// The slice of the galaxy-map contract this contract depends on.

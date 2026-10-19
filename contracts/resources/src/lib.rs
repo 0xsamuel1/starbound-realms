@@ -40,12 +40,14 @@ pub struct StarSystem {
     pub resource_yield: u32,
     pub defense_rating: u32,
     pub last_claimed: u64,
+    pub upgrade_level: u32,
 }
 
 /// The slice of the galaxy-map contract this contract depends on.
 #[contractclient(name = "GalaxyMapClient")]
 pub trait GalaxyMapInterface {
     fn get_system(env: Env, system_id: u32) -> StarSystem;
+    fn upgrade_system(env: Env, player: Address, system_id: u32);
 }
 
 /// Each full period a system is held pays its `resource_yield` once.
@@ -255,6 +257,31 @@ impl ResourcesContract {
             .publish((symbol_short!("burned"), from), (resource, amount));
     }
 
+    /// Upgrades a system's defense, costing 100 * (current_level + 1) Plasma.
+    ///
+    /// Requires the player to own the system and have sufficient Plasma balance.
+    pub fn upgrade_system(env: Env, player: Address, system_id: u32) {
+        player.require_auth();
+
+        let galaxy_map = fetch_galaxy_map_client(&env);
+        let system = galaxy_map.get_system(&system_id);
+
+        verify_player_owns_system(&system, &player);
+
+        let cost = 100i128 * (system.upgrade_level + 1) as i128;
+        let balance = Self::balance(&env, player.clone(), ResourceType::Plasma);
+
+        if balance < cost {
+            panic!("insufficient plasma balance");
+        }
+
+        Self::burn_plasma(&env, &player, cost);
+        galaxy_map.upgrade_system(&player, &system_id);
+
+        env.events()
+            .publish((symbol_short!("upgraded"), player), (system_id, system.upgrade_level + 1, cost));
+    }
+
     /// Queries and returns `player`'s current balance of `resource` from the underlying
     /// Stellar Asset Contract.
     ///
@@ -278,6 +305,12 @@ impl ResourcesContract {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    fn burn_plasma(env: &Env, player: &Address, amount: i128) {
+        let token_addr = Self::token_addr(&env, &ResourceType::Plasma);
+        let client = token::TokenClient::new(&env, &token_addr);
+        client.burn(player, &amount);
+    }
 
     fn token_addr(env: &Env, resource: &ResourceType) -> Address {
         match resource {
