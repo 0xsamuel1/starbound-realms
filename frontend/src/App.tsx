@@ -4,6 +4,7 @@ import { useLeaderboard } from './hooks/useLeaderboard';
 import { NetworkBadge } from './components/NetworkBadge';
 import { GameView } from './components/GameView';
 import { Leaderboard } from './components/Leaderboard';
+import { NotificationProvider, useNotification } from './components/Notifications';
 import { truncateAddress } from './lib/format';
 import { getConfiguredNetworkLabel } from './lib/starboundClient';
 
@@ -217,12 +218,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: 'inherit',
   },
 
-  walletError: {
-    color: 'var(--red)',
-    fontSize: '0.85rem',
-    marginTop: '-0.75rem',
-  },
-
   leaderboardSection: {
     maxWidth: '900px',
     width: '100%',
@@ -266,8 +261,17 @@ const features = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function App() {
+  return (
+    <NotificationProvider>
+      <AppContent />
+    </NotificationProvider>
+  );
+}
+
+function AppContent() {
   const { walletAddress, isConnected: walletConnected, error: walletError, connectWallet, signTransaction } =
     useStellar();
+  useNotification(walletError);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   return (
@@ -350,8 +354,6 @@ export default function App() {
             <button style={styles.btnSecondary}>View on GitHub →</button>
           </a>
         </div>
-
-        {walletError && <p style={styles.walletError} role="alert">{walletError}</p>}
 
         {/* Game loop */}
         <div style={styles.gameLoop}>

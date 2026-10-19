@@ -167,6 +167,15 @@ vi.mock('./BattleLog', () => ({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 import { GameView } from './GameView';
+import { NotificationProvider } from './Notifications';
+
+function renderGameView() {
+  return render(
+    <NotificationProvider>
+      <GameView {...DEFAULT_PROPS} />
+    </NotificationProvider>
+  );
+}
 
 function makeSystem(overrides: Partial<{
   systemId: number;
@@ -228,7 +237,7 @@ describe('GameView', () => {
   // ── Rendering ──────────────────────────────────────────────────────────────
 
   it('renders the galaxy map and battle feed', () => {
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
 
     expect(screen.getByTestId('galaxy-map')).toBeInTheDocument();
     expect(screen.getByTestId('battle-feed')).toBeInTheDocument();
@@ -237,7 +246,7 @@ describe('GameView', () => {
   it('shows a loading message while the galaxy is loading', () => {
     galaxyState.isLoading = true;
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
 
     expect(screen.getByText(/loading galaxy/i)).toBeInTheDocument();
     expect(screen.queryByTestId('galaxy-map')).not.toBeInTheDocument();
@@ -246,7 +255,7 @@ describe('GameView', () => {
   it('shows the shared loading state while fleet data loads', () => {
     fleetState.isLoading = true;
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
 
     expect(screen.getByRole('status', { name: /loading fleet/i })).toBeInTheDocument();
     expect(screen.queryByTestId('fleet')).not.toBeInTheDocument();
@@ -255,7 +264,7 @@ describe('GameView', () => {
   it('shows the shared loading state while trustlines are checked', () => {
     trustlinesState.isLoading = true;
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
 
     expect(screen.getByRole('status', { name: /checking resource setup/i })).toBeInTheDocument();
     expect(screen.queryByTestId('resource-setup-banner')).not.toBeInTheDocument();
@@ -264,7 +273,7 @@ describe('GameView', () => {
   it('shows a galaxy error and hides the map when the galaxy fetch fails', () => {
     galaxyState.error = 'failed to fetch galaxy: 500';
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
 
     expect(screen.getByText(/failed to fetch galaxy/i)).toBeInTheDocument();
     expect(screen.queryByTestId('galaxy-map')).not.toBeInTheDocument();
@@ -276,7 +285,7 @@ describe('GameView', () => {
     const { usePlayerProfile } = await import('../hooks/usePlayerProfile');
     const { useGalaxyData } = await import('../hooks/useGalaxyData');
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
 
     expect(usePlayerProfile).toHaveBeenCalledWith('http://backend.example', 'GPLAYER');
     expect(useGalaxyData).toHaveBeenCalled();
@@ -290,7 +299,7 @@ describe('GameView', () => {
       battlesLost: 2,
     };
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
 
     expect(screen.getByTestId('player-profile')).toHaveTextContent('GPLAYER');
     expect(screen.getByText(/your profile/i)).toBeInTheDocument();
@@ -301,13 +310,13 @@ describe('GameView', () => {
   it('requests the battle history for the connected wallet address', async () => {
     const { useBattleHistory } = await import('../hooks/useBattleHistory');
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
 
     expect(useBattleHistory).toHaveBeenCalledWith('http://backend.example', 'GPLAYER');
   });
 
   it('renders the battle history section', () => {
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
 
     expect(screen.getByText(/battle history/i)).toBeInTheDocument();
     expect(screen.getByTestId('battle-log')).toBeInTheDocument();
@@ -318,7 +327,7 @@ describe('GameView', () => {
   it('selecting a system opens StarSystem for that system', () => {
     galaxyState.systems = [makeSystem({ systemId: 42 })];
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
 
     expect(screen.getByTestId('star-system')).toBeInTheDocument();
@@ -328,7 +337,7 @@ describe('GameView', () => {
   it('closing the StarSystem drawer clears the selection', () => {
     galaxyState.systems = [makeSystem({ systemId: 42 })];
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     expect(screen.getByTestId('star-system')).toBeInTheDocument();
 
@@ -339,7 +348,7 @@ describe('GameView', () => {
   it('returns focus to the cell that opened the drawer when it closes', async () => {
     galaxyState.systems = [makeSystem({ systemId: 42 })];
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     const trigger = screen.getByText('Select System 42');
     fireEvent.click(trigger);
     fireEvent.click(screen.getByText('Close'));
@@ -353,7 +362,7 @@ describe('GameView', () => {
     galaxyState.systems = [makeSystem({ systemId: 42 })];
     claimSystem.mockResolvedValue(undefined);
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Claim'));
 
@@ -366,7 +375,7 @@ describe('GameView', () => {
     galaxyState.systems = [makeSystem({ systemId: 42 })];
     claimSystem.mockResolvedValue(undefined);
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Claim'));
 
@@ -378,7 +387,7 @@ describe('GameView', () => {
     galaxyState.systems = [makeSystem({ systemId: 42 })];
     claimSystem.mockRejectedValue(new Error('claim rejected'));
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Claim'));
 
@@ -392,7 +401,7 @@ describe('GameView', () => {
   it('buildUnit calls FleetClient.buildUnit with the wallet address, unit type, and count', async () => {
     buildUnit.mockResolvedValue(undefined);
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Build Scout'));
 
     await waitFor(() =>
@@ -403,7 +412,7 @@ describe('GameView', () => {
   it('buildUnit refetches fleet and balances on success', async () => {
     buildUnit.mockResolvedValue(undefined);
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Build Scout'));
 
     await waitFor(() => {
@@ -415,7 +424,7 @@ describe('GameView', () => {
   it('buildUnit surfaces an error without crashing when it fails', async () => {
     buildUnit.mockRejectedValue(new Error('build failed'));
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Build Scout'));
 
     await waitFor(() =>
@@ -429,7 +438,7 @@ describe('GameView', () => {
     galaxyState.systems = [makeSystem({ systemId: 42 })];
     moveFleet.mockResolvedValue(undefined);
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Move Fleet'));
 
@@ -442,7 +451,7 @@ describe('GameView', () => {
     galaxyState.systems = [makeSystem({ systemId: 42 })];
     moveFleet.mockResolvedValue(undefined);
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Move Fleet'));
 
@@ -454,7 +463,7 @@ describe('GameView', () => {
     galaxyState.systems = [makeSystem({ systemId: 42 })];
     moveFleet.mockRejectedValue(new Error('move rejected'));
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Move Fleet'));
 
@@ -470,7 +479,7 @@ describe('GameView', () => {
     resolveBattle.mockResolvedValue(99);
     getBattle.mockResolvedValue({ winner: 'GPLAYER', rounds: 3 });
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Attack'));
 
@@ -484,7 +493,7 @@ describe('GameView', () => {
     resolveBattle.mockResolvedValue(99);
     getBattle.mockResolvedValue({ winner: 'GPLAYER', rounds: 2 });
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Attack'));
 
@@ -498,7 +507,7 @@ describe('GameView', () => {
     resolveBattle.mockResolvedValue(99);
     getBattle.mockResolvedValue({ winner: 'GENEMY', rounds: 1 });
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Attack'));
 
@@ -511,7 +520,7 @@ describe('GameView', () => {
     galaxyState.systems = [makeSystem({ systemId: 42, owner: 'GENEMY' })];
     resolveBattle.mockRejectedValue(new Error('battle simulation failed'));
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Attack'));
 
@@ -525,7 +534,7 @@ describe('GameView', () => {
     resolveBattle.mockResolvedValue(99);
     getBattle.mockResolvedValue({ winner: 'GPLAYER', rounds: 1 });
 
-    render(<GameView {...DEFAULT_PROPS} />);
+    renderGameView();
     fireEvent.click(screen.getByText('Select System 42'));
     fireEvent.click(screen.getByText('Attack'));
 

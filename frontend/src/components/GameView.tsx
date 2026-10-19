@@ -16,17 +16,12 @@ import { PlayerProfile } from './PlayerProfile';
 import { BattleLog } from './BattleLog';
 import { ResourceSetupBanner } from './ResourceSetupBanner';
 import { LoadingIndicator } from './LoadingIndicator';
+import { useNotification } from './Notifications';
 import { getStarboundClient } from '../lib/starboundClient';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles: Record<string, React.CSSProperties> = {
-  walletError: {
-    color: 'var(--red)',
-    fontSize: '0.85rem',
-    marginTop: '-0.75rem',
-  },
-
   galaxySection: {
     maxWidth: '900px',
     width: '100%',
@@ -197,6 +192,15 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
     [walletAddress, systems, signTransaction, refetchFleet, refetchGalaxy]
   );
 
+  useNotification(trustlineError);
+  useNotification(galaxyError);
+  useNotification(claimError);
+  useNotification(moveError);
+  useNotification(attackError);
+  useNotification(balancesError);
+  useNotification(fleetError);
+  useNotification(buildError);
+
   return (
     <>
       {/* Galaxy map section */}
@@ -210,10 +214,8 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
             onSetUp={setUpTrustlines}
           />
         )}
-        {trustlineError && <p style={styles.walletError}>{trustlineError}</p>}
         <h2 style={styles.galaxyTitle}>The Galaxy</h2>
         {galaxyLoading && <LoadingIndicator label="Loading galaxy…" />}
-        {galaxyError && <p style={styles.walletError}>{galaxyError}</p>}
         {!galaxyLoading && !galaxyError && (
           <>
             <GalaxyMap systems={systems} walletAddress={walletAddress} onSelectSystem={selectSystem} />
@@ -226,9 +228,6 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
               onMoveFleet={moveFleet}
               onAttack={attackSystem}
             />
-            {claimError && <p style={styles.walletError}>{claimError}</p>}
-            {moveError && <p style={styles.walletError}>{moveError}</p>}
-            {attackError && <p style={styles.walletError}>{attackError}</p>}
             {battleResult && <p style={styles.textMuted}>{battleResult}</p>}
 
             <div ref={playerSectionRef}>
@@ -239,7 +238,6 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
               ) : (
                 <ResourceBalances balances={balances} />
               )}
-              {balancesError && <p style={styles.walletError}>{balancesError}</p>}
               {fleetLoading ? (
                 <LoadingIndicator label="Loading fleet…" />
               ) : (
@@ -256,8 +254,6 @@ export function GameView({ walletAddress, signTransaction, backendUrl }: GameVie
                 playerAddress={walletAddress}
               />
             </div>
-            {fleetError && <p style={styles.walletError}>{fleetError}</p>}
-            {buildError && <p style={styles.walletError}>{buildError}</p>}
           </>
         )}
       </section>
